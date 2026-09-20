@@ -34,8 +34,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 
     body {
-      background-color: var(--bg-color);
-      color: var(--text-color);
+      background-color: var(--bg-color); color: var(--text-color);
       display: flex; flex-direction: column; align-items: center;
       min-height: 100vh; padding-bottom: 40px; transition: background-color 0.3s, color 0.3s;
     }
@@ -54,17 +53,17 @@
       display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 50%;
     }
 
-    main { width: 100%; max-width: 480px; padding: 12px 20px; display: flex; flex-direction: column; gap: 20px; }
+    main { width: 100%; max-width: 480px; padding: 12px 20px; display: flex; flex-direction: column; gap: 16px; }
 
     .card {
       background-color: var(--card-bg); border-radius: 16px; box-shadow: var(--shadow);
-      padding: 36px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 30px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center;
       cursor: pointer; transition: transform 0.2s;
     }
 
     .card:active { transform: scale(0.98); }
-    .card-icon { width: 44px; height: 44px; margin-bottom: 14px; }
-    .card-title { font-size: 19px; font-weight: 700; }
+    .card-icon { width: 40px; height: 40px; margin-bottom: 12px; }
+    .card-title { font-size: 18px; font-weight: 700; text-align: center; }
 
     .view-section {
       display: none; background-color: var(--card-bg); border-radius: 16px;
@@ -80,7 +79,7 @@
 
     .form-group { margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
     .form-group label { font-size: 14px; font-weight: 600; }
-    .form-group input {
+    .form-group input, .form-group select {
       width: 100%; padding: 10px 12px; border: 1px solid var(--border-color);
       background-color: var(--card-bg); color: var(--text-color); border-radius: 8px; font-size: 14px; outline: none;
     }
@@ -99,8 +98,12 @@
     td { padding: 12px 6px; vertical-align: middle; border-bottom: 1px solid var(--border-color); font-weight: 600; line-height: 1.3; }
     tr:nth-child(even) td { background-color: var(--row-even); }
     tr:nth-child(odd) td { background-color: var(--row-odd); }
+    
+    .year-tag { font-size: 10px; background: #e0e0e0; color: #333; padding: 2px 5px; border-radius: 4px; margin-right: 4px; display: inline-block; }
+    body.dark-mode .year-tag { background: #444; color: #fff; }
+    
     .uploader-tag { font-size: 11px; opacity: 0.7; font-weight: normal; margin-top: 4px; }
-    .download-icon { color: var(--text-color); text-decoration: none; font-size: 20px; font-weight: bold; }
+    .download-icon { color: var(--text-color); text-decoration: none; font-size: 18px; font-weight: bold; background: var(--header-purple); padding: 6px 12px; border-radius: 6px; display: inline-block; }
 
     svg { stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
   </style>
@@ -121,34 +124,70 @@
     </div>
   </header>
 
+  <!-- 主菜单 -->
   <main id="main-menu">
     <div class="card" id="btn-upload">
       <svg class="card-icon" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"></path><line x1="4" y1="21" x2="20" y2="21"></line></svg>
       <div class="card-title">上傳考卷</div>
     </div>
-    <div class="card" id="btn-download-2025">
-      <svg class="card-icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"></path><line x1="4" y1="21" x2="20" y2="21"></line></svg>
-      <div class="card-title">下載考卷 (2025)</div>
-    </div>
     <div class="card" id="btn-download-2026">
       <svg class="card-icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"></path><line x1="4" y1="21" x2="20" y2="21"></line></svg>
       <div class="card-title">下載考卷 (2026)</div>
     </div>
+    <div class="card" id="btn-download-old">
+      <svg class="card-icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"></path><line x1="4" y1="21" x2="20" y2="21"></line></svg>
+      <div class="card-title">下載考卷 (2025 及之前)</div>
+    </div>
   </main>
 
+  <!-- 上传页面 -->
   <main id="upload-view" class="view-section">
     <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
     <div class="section-title">↑ 上傳考卷</div>
     <form id="upload-form">
-      <div class="form-group"><label>上載者姓名 (Name)</label><input type="text" id="uploaderName" required placeholder="例如: 小明" /></div>
-      <div class="form-group"><label>年份 (Year)</label><input type="text" id="paperYear" required value="2026" /></div>
-      <div class="form-group"><label>科目 (Subject)</label><input type="text" id="subjectName" required placeholder="例如: 英文試卷 1" /></div>
-      <div class="form-group"><label>學校 (School)</label><input type="text" id="schoolName" required placeholder="例如: 巴生興華中學" /></div>
-      <div class="form-group"><label>考卷下載連結 (Download Link)</label><input type="url" id="downloadUrl" required placeholder="https://drive.google.com/..." /></div>
+      <div class="form-group">
+        <label>上載者姓名 (Name)</label>
+        <input type="text" id="uploaderName" required placeholder="例如: 小明" />
+      </div>
+      <div class="form-group">
+        <label>年份 (Year)</label>
+        <input type="number" id="paperYear" required value="2026" placeholder="例如: 2026, 2025, 2024..." />
+      </div>
+      <div class="form-group">
+        <label>科目 (Subject)</label>
+        <input type="text" id="subjectName" required placeholder="例如: 華文試卷 1" />
+      </div>
+      <div class="form-group">
+        <label>學校 (School)</label>
+        <input type="text" id="schoolName" required placeholder="例如: 巴生興華中學" />
+      </div>
+      
+      <!-- 上传类型切换：支持 Drive 链接或 PDF 文件 -->
+      <div class="form-group">
+        <label>提供方式 (Type)</label>
+        <select id="uploadType" onchange="toggleUploadType()">
+          <option value="link">Google Drive / 雲端連結</option>
+          <option value="file">上傳 PDF 文件</option>
+        </select>
+      </div>
+
+      <!-- 链接输入框 -->
+      <div class="form-group" id="group-link">
+        <label>考卷下載連結 (Download Link)</label>
+        <input type="url" id="downloadUrl" placeholder="https://drive.google.com/..." />
+      </div>
+
+      <!-- 本地文件上传框 -->
+      <div class="form-group" id="group-file" style="display: none;">
+        <label>選擇 PDF 文件</label>
+        <input type="file" id="fileInput" accept=".pdf" />
+      </div>
+
       <button type="submit" class="btn-submit" id="submit-btn">上傳並發佈</button>
     </form>
   </main>
 
+  <!-- 下载列表页面 -->
   <main id="download-view" class="view-section">
     <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
     <div class="section-title" id="download-title">↓ 下載考卷</div>
@@ -156,9 +195,9 @@
       <table>
         <thead>
           <tr>
-            <th>科目 <br><small>↓A-Z</small></th>
-            <th>學校 <br><small>↑↓</small></th>
-            <th>Download<br>Link</th>
+            <th>年份/科目</th>
+            <th>學校</th>
+            <th>下載</th>
           </tr>
         </thead>
         <tbody id="papers-list"></tbody>
@@ -167,7 +206,6 @@
   </main>
 
   <script>
-    // 内存临时数组（防止某些在线编辑器禁止 localStorage 报错）
     let inMemoryPapers = [];
 
     document.getElementById('theme-toggle').onclick = () => document.body.classList.toggle('dark-mode');
@@ -187,14 +225,30 @@
       uploadView.style.display = 'block';
     };
 
-    document.getElementById('btn-download-2025').onclick = () => openDownloadPage('2025');
     document.getElementById('btn-download-2026').onclick = () => openDownloadPage('2026');
+    document.getElementById('btn-download-old').onclick = () => openDownloadPage('old');
 
-    function openDownloadPage(year) {
+    // 切换输入框类型 (Drive 链接 或 PDF 文件)
+    function toggleUploadType() {
+      const type = document.getElementById('uploadType').value;
+      if (type === 'link') {
+        document.getElementById('group-link').style.display = 'flex';
+        document.getElementById('group-file').style.display = 'none';
+      } else {
+        document.getElementById('group-link').style.display = 'none';
+        document.getElementById('group-file').style.display = 'flex';
+      }
+    }
+
+    function openDownloadPage(category) {
       mainMenu.style.display = 'none';
       downloadView.style.display = 'block';
-      document.getElementById('download-title').innerText = `↓ 下載考卷 (${year})`;
-      renderPapers(year);
+      if (category === '2026') {
+        document.getElementById('download-title').innerText = `↓ 下載考卷 (2026)`;
+      } else {
+        document.getElementById('download-title').innerText = `↓ 下載考卷 (2025 及之前)`;
+      }
+      renderPapers(category);
     }
 
     function getStoredPapers() {
@@ -211,66 +265,111 @@
       try {
         localStorage.setItem('uec_papers_data', JSON.stringify(data));
       } catch (e) {
-        console.warn('localStorage 不可用，已保存在内存中。');
+        console.warn('localStorage 不可用');
       }
     }
 
-    function renderPapers(year) {
-      const papers = getStoredPapers().filter(p => p.year === year);
+    // 渲染试卷
+    function renderPapers(category) {
+      const allPapers = getStoredPapers();
+      
+      // 年份过滤分类：2026归入2026专区，其余（2025、2024、2023等）全部归入 old 专区
+      const papers = allPapers.filter(p => {
+        const y = parseInt(p.year);
+        if (category === '2026') {
+          return y === 2026;
+        } else {
+          return y <= 2025 || isNaN(y);
+        }
+      });
+
       const listContainer = document.getElementById('papers-list');
       listContainer.innerHTML = '';
 
       if (papers.length === 0) {
-        listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px;">暫無此年份的考卷數據</td></tr>';
+        listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px;">暫無此分類的考卷數據</td></tr>';
         return;
       }
 
       papers.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${escapeHtml(item.subject)}</td>
+          <td>
+            <span class="year-tag">${escapeHtml(item.year)}</span>
+            <b>${escapeHtml(item.subject)}</b>
+          </td>
           <td>${escapeHtml(item.school)}<div class="uploader-tag">由 ${escapeHtml(item.uploader)} 上傳</div></td>
-          <td><a href="${escapeHtml(item.link)}" target="_blank" class="download-icon">↓</a></td>
+          <td><a href="${escapeHtml(item.link)}" target="_blank" class="download-icon" download="paper.pdf">↓</a></td>
         `;
         listContainer.appendChild(tr);
       });
     }
 
-    // 表单提交处理：即时完成 + 自动重置按钮（支持连续提交）
+    // 表单提交处理：同时支持文件读取与链接保存
     document.getElementById('upload-form').addEventListener('submit', function(e) {
       e.preventDefault();
 
       const submitBtn = document.getElementById('submit-btn');
+      const uploadType = document.getElementById('uploadType').value;
       
-      const newPaper = {
-        id: Date.now(),
-        uploader: document.getElementById('uploaderName').value,
-        year: document.getElementById('paperYear').value.trim(),
-        subject: document.getElementById('subjectName').value,
-        school: document.getElementById('schoolName').value,
-        link: document.getElementById('downloadUrl').value
-      };
+      const uploader = document.getElementById('uploaderName').value;
+      const year = document.getElementById('paperYear').value.trim();
+      const subject = document.getElementById('subjectName').value;
+      const school = document.getElementById('schoolName').value;
 
-      // 保存数据
-      const papers = getStoredPapers();
-      papers.push(newPaper);
-      saveStoredPapers(papers);
+      function savePaperObj(downloadLink) {
+        const newPaper = {
+          id: Date.now(),
+          uploader: uploader,
+          year: year,
+          subject: subject,
+          school: school,
+          link: downloadLink
+        };
 
-      // 1. 改变按钮状态为“成功”
-      submitBtn.innerText = '✓ 上傳成功！';
-      submitBtn.classList.add('success');
-      submitBtn.disabled = true;
+        const papers = getStoredPapers();
+        papers.push(newPaper);
+        saveStoredPapers(papers);
 
-      // 2. 清空科目和下载链接，方便连续上传下一科
-      document.getElementById('subjectName').value = '';
-      document.getElementById('downloadUrl').value = '';
+        submitBtn.innerText = '✓ 上傳成功！';
+        submitBtn.classList.add('success');
+        submitBtn.disabled = true;
 
-      // 3. 1.5秒后自动恢复按钮，可再次点击上传
-      setTimeout(() => {
-        submitBtn.innerText = '上傳並發佈';
-        submitBtn.classList.remove('success');
-        submitBtn.disabled = false;
-      }, 1500);
+        // 清空提交框，保留名字和年份，方便继续录入下一科
+        document.getElementById('subjectName').value = '';
+        document.getElementById('downloadUrl').value = '';
+        document.getElementById('fileInput').value = '';
+
+        setTimeout(() => {
+          submitBtn.innerText = '上傳並發佈';
+          submitBtn.classList.remove('success');
+          submitBtn.disabled = false;
+        }, 1500);
+      }
+
+      if (uploadType === 'link') {
+        const link = document.getElementById('downloadUrl').value;
+        if (!link) {
+          alert('請輸入下載連結！');
+          return;
+        }
+        savePaperObj(link);
+      } else {
+        const fileInput = document.getElementById('fileInput');
+        if (fileInput.files.length === 0) {
+          alert('請先選擇一個 PDF 文件！');
+          return;
+        }
+        
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+        submitBtn.innerText = '正在處理文件...';
+        
+        reader.onload = function(evt) {
+          savePaperObj(evt.target.result); // 转成 Base64 Data URL 存储
+        };
+        reader.readAsDataURL(file);
+      }
     });
 
     function escapeHtml(str) {
