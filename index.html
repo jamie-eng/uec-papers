@@ -105,6 +105,8 @@
     .uploader-tag { font-size: 11px; opacity: 0.7; font-weight: normal; margin-top: 4px; }
     .download-icon { color: var(--text-color); text-decoration: none; font-size: 18px; font-weight: bold; background: var(--header-purple); padding: 6px 12px; border-radius: 6px; display: inline-block; }
 
+    .or-divider { text-align: center; font-size: 12px; opacity: 0.5; margin: 6px 0; }
+
     svg { stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
   </style>
 </head>
@@ -162,10 +164,20 @@
         <label>學校 (School)</label>
         <input type="text" id="schoolName" required placeholder="例如: 巴生興華中學" />
       </div>
+      
+      <!-- 文件选择选项 -->
       <div class="form-group">
-        <label>考卷下載連結 (Download Link)</label>
-        <input type="url" id="downloadUrl" required placeholder="https://drive.google.com/..." />
+        <label>📁 選擇本地檔案 (PDF / 圖片)</label>
+        <input type="file" id="paperFile" accept=".pdf,image/*" />
       </div>
+
+      <div class="or-divider">── 或填寫網絡連結 ──</div>
+
+      <div class="form-group">
+        <label>考卷下載連結 (Google Drive / 云端)</label>
+        <input type="url" id="downloadUrl" placeholder="https://drive.google.com/..." />
+      </div>
+
       <button type="submit" class="btn-submit" id="submit-btn">上傳同步到 Firebase 雲端</button>
     </form>
   </main>
@@ -189,9 +201,7 @@
   </main>
 
   <script>
-    // Firebase Realtime Database API URL
     const DB_URL = "https://uec-papers-default-rtdb.firebaseio.com/papers.json";
-
     let currentCategory = '2026';
 
     document.getElementById('theme-toggle').onclick = () => document.body.classList.toggle('dark-mode');
@@ -221,13 +231,12 @@
       fetchPapers();
     }
 
-    // 从 Firebase 读取试卷列表
     async function fetchPapers() {
       const listContainer = document.getElementById('papers-list');
       listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px;">資料載入中...</td></tr>';
 
       try {
-        const response = await fetch(DB_URL);
+        const response = await fetch(DB_URL, { method: 'GET', headers: { 'Accept': 'application/json' } });
         const data = await response.json();
         
         let papers = [];
@@ -240,8 +249,7 @@
 
         renderPapers(papers, currentCategory);
       } catch (err) {
-        console.error(err);
-        listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px; color:red;">載入失敗，請檢查網路。</td></tr>';
+        listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px; color:red;">載入失敗，請檢查網絡。</td></tr>';
       }
     }
 
@@ -264,25 +272,40 @@
         tr.innerHTML = `
           <td><span class="year-tag">${escapeHtml(item.year)}</span><b>${escapeHtml(item.subject)}</b></td>
           <td>${escapeHtml(item.school)}<div class="uploader-tag">由 ${escapeHtml(item.uploader)} 上傳</div></td>
-          <td><a href="${escapeHtml(item.link)}" target="_blank" rel="noopener" class="download-icon">↓</a></td>
+          <td><a href="${escapeHtml(item.link)}" target="_blank" download="paper" class="download-icon">↓</a></td>
         `;
         listContainer.appendChild(tr);
       });
     }
 
-    // 上传新增考卷到 Firebase
+    // 上传并转换文件
     document.getElementById('upload-form').addEventListener('submit', async function(e) {
       e.preventDefault();
       const submitBtn = document.getElementById('submit-btn');
+      const fileInput = document.getElementById('paperFile');
+      const urlInput = document.getElementById('downloadUrl');
+
+      if (!fileInput.files[0] && !urlInput.value.trim()) {
+        alert("請選擇本地檔案，或者填寫下載連結！");
+        return;
+      }
+
       submitBtn.disabled = true;
-      submitBtn.innerText = '正在同步至 Firebase 雲端...';
+      submitBtn.innerText = '正在上傳並處理數據...';
+
+      let fileUrl = urlInput.value.trim();
+
+      // 如果用户选择了文件，转为 Base64 存储
+      if (fileInput.files[0]) {
+        fileUrl = await readFileAsBase64(fileInput.files[0]);
+      }
 
       const newPaper = {
         uploader: document.getElementById('uploaderName').value,
         year: document.getElementById('paperYear').value.trim(),
         subject: document.getElementById('subjectName').value,
         school: document.getElementById('schoolName').value,
-        link: document.getElementById('downloadUrl').value,
+        link: fileUrl,
         createdAt: Date.now()
       };
 
@@ -298,7 +321,8 @@
           submitBtn.classList.add('success');
 
           document.getElementById('subjectName').value = '';
-          document.getElementById('downloadUrl').value = '';
+          urlInput.value = '';
+          fileInput.value = '';
 
           setTimeout(() => {
             submitBtn.innerText = '上傳同步到 Firebase 雲端';
@@ -309,11 +333,20 @@
           throw new Error('Upload failed');
         }
       } catch (err) {
-        alert('上傳失敗，請稍後重試！');
+        alert('上傳失敗，请确认文件大小不要过大！');
         submitBtn.innerText = '上傳同步到 Firebase 雲端';
         submitBtn.disabled = false;
       }
     });
+
+    function readFileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+        reader.readAsDataURL(file);
+      });
+    }
 
     function escapeHtml(str) {
       return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -321,3 +354,4 @@
   </script>
 </body>
 </html>
+
