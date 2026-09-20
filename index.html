@@ -103,9 +103,25 @@
     body.dark-mode .year-tag { background: #444; color: #fff; }
     
     .uploader-tag { font-size: 11px; opacity: 0.7; font-weight: normal; margin-top: 4px; }
-    .download-icon { color: var(--text-color); text-decoration: none; font-size: 18px; font-weight: bold; background: var(--header-purple); padding: 6px 12px; border-radius: 6px; display: inline-block; }
+    .download-btn { cursor: pointer; border: none; color: var(--text-color); font-size: 16px; font-weight: bold; background: var(--header-purple); padding: 6px 14px; border-radius: 6px; display: inline-block; }
 
     .or-divider { text-align: center; font-size: 12px; opacity: 0.5; margin: 6px 0; }
+
+    /* Modal 全屏查看器 */
+    .modal {
+      display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.85); flex-direction: column; align-items: center; justify-content: center; padding: 10px;
+    }
+    .modal-header {
+      width: 100%; max-width: 600px; display: flex; justify-content: space-between; align-items: center; color: white; padding: 10px 0;
+    }
+    .modal-close { background: none; border: none; color: white; font-size: 28px; cursor: pointer; }
+    .modal-body {
+      width: 100%; max-width: 600px; height: 80vh; background: #fff; border-radius: 12px; overflow: hidden;
+      display: flex; justify-content: center; align-items: center;
+    }
+    .modal-body img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .modal-body iframe { width: 100%; height: 100%; border: none; }
 
     svg { stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
   </style>
@@ -165,7 +181,6 @@
         <input type="text" id="schoolName" required placeholder="例如: 巴生興華中學" />
       </div>
       
-      <!-- 文件选择选项 -->
       <div class="form-group">
         <label>📁 選擇本地檔案 (PDF / 圖片)</label>
         <input type="file" id="paperFile" accept=".pdf,image/*" />
@@ -192,7 +207,7 @@
           <tr>
             <th>年份/科目</th>
             <th>學校</th>
-            <th>下載</th>
+            <th>檢視/下載</th>
           </tr>
         </thead>
         <tbody id="papers-list"></tbody>
@@ -200,9 +215,19 @@
     </div>
   </main>
 
+  <!-- 全屏查看器 Modal -->
+  <div id="viewer-modal" class="modal">
+    <div class="modal-header">
+      <span id="modal-title">考卷預覽</span>
+      <button class="modal-close" onclick="closeViewer()">&times;</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+
   <script>
     const DB_URL = "https://uec-papers-default-rtdb.firebaseio.com/papers.json";
     let currentCategory = '2026';
+    let papersData = [];
 
     document.getElementById('theme-toggle').onclick = () => document.body.classList.toggle('dark-mode');
     const mainMenu = document.getElementById('main-menu');
@@ -239,15 +264,15 @@
         const response = await fetch(DB_URL, { method: 'GET', headers: { 'Accept': 'application/json' } });
         const data = await response.json();
         
-        let papers = [];
+        papersData = [];
         if (data) {
-          papers = Object.keys(data).map(key => ({
+          papersData = Object.keys(data).map(key => ({
             id: key,
             ...data[key]
           }));
         }
 
-        renderPapers(papers, currentCategory);
+        renderPapers(papersData, currentCategory);
       } catch (err) {
         listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px; color:red;">載入失敗，請檢查網絡。</td></tr>';
       }
@@ -272,13 +297,54 @@
         tr.innerHTML = `
           <td><span class="year-tag">${escapeHtml(item.year)}</span><b>${escapeHtml(item.subject)}</b></td>
           <td>${escapeHtml(item.school)}<div class="uploader-tag">由 ${escapeHtml(item.uploader)} 上傳</div></td>
-          <td><a href="${escapeHtml(item.link)}" target="_blank" download="paper" class="download-icon">↓</a></td>
+          <td><button class="download-btn" onclick="openViewer('${item.id}')">↓ 查看</button></td>
         `;
         listContainer.appendChild(tr);
       });
     }
 
-    // 上传并转换文件
+    // 内置查看器逻辑
+    function openViewer(id) {
+      const paper = papersData.find(p => p.id === id);
+      if (!paper || !paper.link) {
+        alert("找不到檔案連結！");
+        return;
+      }
+
+      const modal = document.getElementById('viewer-modal');
+      const modalBody = document.getElementById('modal-body');
+      const modalTitle = document.getElementById('modal-title');
+      
+      modalTitle.innerText = `${paper.subject} (${paper.school})`;
+      modalBody.innerHTML = '';
+
+      const link = paper.link;
+
+      if (link.startsWith('data:image/')) {
+        // 预览Base64图片
+        const img = document.createElement('img');
+        img.src = link;
+        modalBody.appendChild(img);
+      } else if (link.startsWith('data:application/pdf')) {
+        // 预览Base64 PDF
+        const iframe = document.createElement('iframe');
+        iframe.src = link;
+        modalBody.appendChild(iframe);
+      } else {
+        // 预览常规外链（Google Drive等）
+        window.open(link, '_blank');
+        return;
+      }
+
+      modal.style.display = 'flex';
+    }
+
+    function closeViewer() {
+      document.getElementById('viewer-modal').style.display = 'none';
+      document.getElementById('modal-body').innerHTML = '';
+    }
+
+    // 上传表单逻辑
     document.getElementById('upload-form').addEventListener('submit', async function(e) {
       e.preventDefault();
       const submitBtn = document.getElementById('submit-btn');
@@ -295,7 +361,6 @@
 
       let fileUrl = urlInput.value.trim();
 
-      // 如果用户选择了文件，转为 Base64 存储
       if (fileInput.files[0]) {
         fileUrl = await readFileAsBase64(fileInput.files[0]);
       }
@@ -354,4 +419,3 @@
   </script>
 </body>
 </html>
-
