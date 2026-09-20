@@ -4,6 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>統考預試試卷收集站</title>
+  
+  <!-- 引入 PDF.js 库，解决 iPhone/iOS 无法顺畅翻页的问题 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+  </script>
+
   <style>
     :root {
       --bg-color: #f2f3f5;
@@ -119,10 +126,11 @@
     }
     .modal-close { background: none; border: none; color: white; font-size: 28px; cursor: pointer; }
     .modal-body {
-      width: 100%; max-width: 600px; height: 80vh; background: #fff; border-radius: 12px; overflow: hidden;
-      display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative;
+      width: 100%; max-width: 600px; height: 80vh; background: #1a1a1a; border-radius: 12px; overflow-y: auto;
+      display: flex; flex-direction: column; align-items: center; position: relative; padding: 10px;
     }
     .modal-body img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .pdf-page-canvas { width: 100% !important; height: auto !important; margin-bottom: 10px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
 
     svg { stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
   </style>
@@ -306,8 +314,8 @@
       });
     }
 
-    // 全屏查看器逻辑
-    function openViewer(id) {
+    // 全屏查看器逻辑 (支持 iPhone 原生逐页渲染)
+    async function openViewer(id) {
       const paper = papersData.find(p => p.id === id);
       if (!paper || !paper.link) {
         alert("找不到檔案連結！");
@@ -319,43 +327,61 @@
       const modalTitle = document.getElementById('modal-title');
       
       modalTitle.innerText = `${paper.subject} (${paper.school})`;
-      modalBody.innerHTML = '';
+      modalBody.innerHTML = '<div style="color:white; padding:20px;">正在加載檔案页面...</div>';
 
       const link = paper.link;
 
       if (link.startsWith('data:image/')) {
-        // 图像预览
+        modalBody.innerHTML = '';
         const img = document.createElement('img');
         img.src = link;
         modalBody.appendChild(img);
       } else if (link.startsWith('data:application/pdf')) {
-        // PDF 预览：附带“在新标签页打开完整PDF”按钮，解决只能看第一页问题
-        const container = document.createElement('div');
-        container.style.cssText = 'width:100%; height:100%; display:flex; flex-direction:column; align-items:center;';
-
+        modalBody.innerHTML = '';
+        
+        // 顶部添加保存/全屏打开按钮
         const topBar = document.createElement('div');
-        topBar.style.cssText = 'padding:10px; width:100%; text-align:center; background:#f0ebf8;';
+        topBar.style.cssText = 'padding:8px; width:100%; text-align:center; background:#2a2a2a; border-radius:6px; margin-bottom:10px;';
         
         const openBtn = document.createElement('button');
-        openBtn.innerText = '📄 點此在新標籤頁打開完整 PDF (看全部頁面)';
-        openBtn.style.cssText = 'padding:8px 16px; background:#4a3b68; color:white; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:13px;';
+        openBtn.innerText = '💾 在新標籤頁開啟 / 儲存完整 PDF';
+        openBtn.style.cssText = 'padding:6px 14px; background:#4a3b68; color:white; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:12px;';
         openBtn.onclick = () => {
           const blob = base64ToBlob(link);
           const blobUrl = URL.createObjectURL(blob);
           window.open(blobUrl, '_blank');
         };
-        
         topBar.appendChild(openBtn);
-        container.appendChild(topBar);
+        modalBody.appendChild(topBar);
 
-        const iframe = document.createElement('iframe');
-        iframe.src = link;
-        iframe.style.cssText = 'width:100%; flex:1; border:none;';
-        container.appendChild(iframe);
+        // 使用 PDF.js 渲染所有页面，解决 iPhone 限制
+        try {
+          const pdfData = atob(link.split(',')[1]);
+          const loadingTask = pdfjsLib.getDocument({ data: pdfData });
+          const pdf = await loadingTask.promise;
 
-        modalBody.appendChild(container);
+          for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+            const page = await pdf.getPage(pageNum);
+            const viewport = page.getViewport({ scale: 1.5 });
+            
+            const canvas = document.createElement('canvas');
+            canvas.className = 'pdf-page-canvas';
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            modalBody.appendChild(canvas);
+
+            await page.render({
+              canvasContext: context,
+              viewport: viewport
+            }).promise;
+          }
+        } catch (err) {
+          modalBody.innerHTML = '<div style="color:red; padding:20px;">PDF 加載失敗，請嘗試在新標籤頁開啟。</div>';
+          modalBody.appendChild(topBar);
+        }
       } else {
-        // 外部链接 (Google Drive等) 直接在新页面打开
         window.open(link, '_blank');
         return;
       }
