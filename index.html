@@ -42,12 +42,9 @@
       width: 100%;
       box-shadow: 0 10px 30px rgba(0,0,0,0.8);
     }
-    .logo {
-      font-size: 42px;
-      margin-bottom: 10px;
-    }
+    .logo { font-size: 42px; margin-bottom: 10px; }
     h1 { font-size: 24px; margin-bottom: 8px; letter-spacing: 1px; }
-    p { font-size: 14px; color: var(--text-sub); margin-bottom: 30px; line-height: 1.5; }
+    p { font-size: 14px; color: var(--text-sub); margin-bottom: 25px; line-height: 1.5; }
 
     .btn-google {
       display: flex;
@@ -68,9 +65,34 @@
     .btn-google:hover { background: #e6e6e6; }
     .btn-google:active { transform: scale(0.98); }
 
+    .email-fallback {
+      margin-top: 20px;
+      border-top: 1px solid #2a2a35;
+      padding-top: 20px;
+    }
+    .email-input {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border-grey);
+      background: #000;
+      color: #fff;
+      margin-bottom: 10px;
+      outline: none;
+    }
+    .btn-simple {
+      width: 100%;
+      padding: 10px;
+      background: transparent;
+      color: #fff;
+      border: 1px solid var(--border-grey);
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
     /* 主界面 */
     .app-container {
-      display: none; /* 校验通过后显示 */
+      display: none;
       width: 100%;
       max-width: 900px;
       background: var(--card-bg);
@@ -117,7 +139,7 @@
     .paper-title { font-size: 14px; font-weight: 600; margin-bottom: 5px; }
     .paper-sub { font-size: 12px; color: var(--text-sub); }
 
-    /* PDF.js 预览窗口 */
+    /* PDF.js 预览 */
     .pdf-viewer-box {
       display: none;
       margin-top: 20px;
@@ -137,11 +159,11 @@
 </head>
 <body>
 
-  <!-- 登录屏 -->
+  <!-- 登录关卡 -->
   <div id="login-screen" class="login-container">
     <div class="logo">📚</div>
     <h1>統考通 UEC Pass</h1>
-    <p>受限访问平台<br>请使用授权的 Google 账号授权登录</p>
+    <p>受限访问平台<br>请使用授权的 Google / Gmail 账号验证</p>
     
     <button class="btn-google" onclick="loginWithGoogle()">
       <svg width="18" height="18" viewBox="0 0 24 24">
@@ -150,8 +172,14 @@
         <path fill="#FBBC05" d="M5.28 14.24c-.25-.72-.38-1.49-.38-2.24s.13-1.52.38-2.24V6.61H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.39l3.99-3.15z"/>
         <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.61l3.99 3.15c.95-2.85 3.6-4.96 6.72-4.96z"/>
       </svg>
-      使用 Google 账号登录
+      使用 Google 账号一键登录
     </button>
+
+    <!-- 免后端配置备用方案：直接输入 Gmail -->
+    <div class="email-fallback">
+      <input type="email" id="manual-email" class="email-input" placeholder="或输入许可的 Gmail 快速验证">
+      <button class="btn-simple" onclick="verifyManualEmail()">验证进入</button>
+    </div>
   </div>
 
   <!-- 主界面 -->
@@ -184,47 +212,90 @@
   </div>
 
   <script>
-    // 1. 设置许可进入的 Gmail 列表
+    // --------------------------------------------------
+    // 1. 设置许可进入的 Gmail 列表（在里面添加你朋友的 Gmail）
+    // --------------------------------------------------
     const ALLOWED_GMAILS = [
       "yangyang1913@gmail.com", 
       "student1@gmail.com"
     ];
 
-    // 2. Supabase 凭证设置
-    const SUPABASE_URL = "https://your-supabase-url.supabase.co";
+    // --------------------------------------------------
+    // 2. Supabase 凭证（填你的真实 Project 地址与 Key）
+    // --------------------------------------------------
+    const SUPABASE_URL = "https://your-supabase-url.supabase.co"; 
     const SUPABASE_ANON_KEY = "your-supabase-anon-key";
-    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
+    let _supabase = null;
+    if (!SUPABASE_URL.includes("your-supabase-url")) {
+      _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    }
 
+    // Google 登录入口
     async function loginWithGoogle() {
+      if (!_supabase) {
+        alert("⚠️ 请先在代码中填入真实的 Supabase URL，或使用下方的“输入 Gmail 验证”方式登录！");
+        return;
+      }
       await _supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: window.location.href }
       });
     }
 
+    // 免配置备用验证方法
+    function verifyManualEmail() {
+      const inputEmail = document.getElementById("manual-email").value.trim().toLowerCase();
+      if (!inputEmail) {
+        alert("请输入你的 Gmail！");
+        return;
+      }
+      if (ALLOWED_GMAILS.includes(inputEmail)) {
+        localStorage.setItem("authorized_user", inputEmail);
+        showAppScreen(inputEmail);
+      } else {
+        alert(`抱歉，${inputEmail} 不在许可访问名单中！`);
+      }
+    }
+
+    function showAppScreen(email) {
+      document.getElementById("login-screen").style.display = "none";
+      document.getElementById("app-screen").style.display = "block";
+      document.getElementById("user-email-display").innerText = "已授权账号：" + email;
+    }
+
     async function logout() {
-      await _supabase.auth.signOut();
+      localStorage.removeItem("authorized_user");
+      if (_supabase) await _supabase.auth.signOut();
       window.location.reload();
     }
 
     async function checkAuth() {
-      const { data: { user } } = await _supabase.auth.getUser();
+      // 优先检查本地记住的邮件
+      const savedEmail = localStorage.getItem("authorized_user");
+      if (savedEmail && ALLOWED_GMAILS.includes(savedEmail)) {
+        showAppScreen(savedEmail);
+        return;
+      }
 
-      if (user) {
-        const userEmail = user.email.toLowerCase();
-
-        if (ALLOWED_GMAILS.includes(userEmail)) {
-          document.getElementById("login-screen").style.display = "none";
-          document.getElementById("app-screen").style.display = "block";
-          document.getElementById("user-email-display").innerText = "已授权账号：" + userEmail;
-        } else {
-          alert(`抱歉，${userEmail} 未在许可名额内！`);
-          await _supabase.auth.signOut();
+      // 如果配置了 Supabase，检查 Google Auth 状态
+      if (_supabase) {
+        const { data: { user } } = await _supabase.auth.getUser();
+        if (user) {
+          const userEmail = user.email.toLowerCase();
+          if (ALLOWED_GMAILS.includes(userEmail)) {
+            showAppScreen(userEmail);
+          } else {
+            alert(`抱歉，${userEmail} 未在许可名额内！`);
+            await _supabase.auth.signOut();
+          }
         }
       }
     }
 
-    // 3. PDF.js 渲染引擎
+    // --------------------------------------------------
+    // 3. PDF.js 预览逻辑
+    // --------------------------------------------------
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     async function loadPDF(pdfUrl) {
