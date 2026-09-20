@@ -109,7 +109,7 @@
 
     .or-divider { text-align: center; font-size: 12px; opacity: 0.5; margin: 6px 0; }
 
-    /* Modal 弹窗查看器 */
+    /* Modal 查看器 */
     .modal {
       display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%;
       background-color: rgba(0,0,0,0.85); flex-direction: column; align-items: center; justify-content: center; padding: 10px;
@@ -123,7 +123,6 @@
       display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative;
     }
     .modal-body img { max-width: 100%; max-height: 100%; object-fit: contain; }
-    .modal-body iframe { width: 100%; height: 100%; border: none; }
 
     svg { stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
   </style>
@@ -229,7 +228,7 @@
 
   <script>
     const DB_URL = "https://uec-papers-default-rtdb.firebaseio.com/papers.json";
-    const MAX_FILE_SIZE_MB = 100; // 最大文件上限设为 100MB
+    const MAX_FILE_SIZE_MB = 100;
     let currentCategory = '2026';
     let papersData = [];
 
@@ -330,10 +329,31 @@
         img.src = link;
         modalBody.appendChild(img);
       } else if (link.startsWith('data:application/pdf')) {
-        // PDF 预览
+        // PDF 预览：附带“在新标签页打开完整PDF”按钮，解决只能看第一页问题
+        const container = document.createElement('div');
+        container.style.cssText = 'width:100%; height:100%; display:flex; flex-direction:column; align-items:center;';
+
+        const topBar = document.createElement('div');
+        topBar.style.cssText = 'padding:10px; width:100%; text-align:center; background:#f0ebf8;';
+        
+        const openBtn = document.createElement('button');
+        openBtn.innerText = '📄 點此在新標籤頁打開完整 PDF (看全部頁面)';
+        openBtn.style.cssText = 'padding:8px 16px; background:#4a3b68; color:white; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:13px;';
+        openBtn.onclick = () => {
+          const blob = base64ToBlob(link);
+          const blobUrl = URL.createObjectURL(blob);
+          window.open(blobUrl, '_blank');
+        };
+        
+        topBar.appendChild(openBtn);
+        container.appendChild(topBar);
+
         const iframe = document.createElement('iframe');
         iframe.src = link;
-        modalBody.appendChild(iframe);
+        iframe.style.cssText = 'width:100%; flex:1; border:none;';
+        container.appendChild(iframe);
+
+        modalBody.appendChild(container);
       } else {
         // 外部链接 (Google Drive等) 直接在新页面打开
         window.open(link, '_blank');
@@ -343,19 +363,30 @@
       modal.style.display = 'flex';
     }
 
+    function base64ToBlob(base64Data) {
+      const parts = base64Data.split(';base64,');
+      const contentType = parts[0].split(':')[1];
+      const raw = window.atob(parts[1]);
+      const uInt8Array = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; ++i) {
+        uInt8Array[i] = raw.charCodeAt(i);
+      }
+      return new Blob([uInt8Array], { type: contentType });
+    }
+
     function closeViewer() {
       document.getElementById('viewer-modal').style.display = 'none';
       document.getElementById('modal-body').innerHTML = '';
     }
 
-    // 检查上传文件大小限制
+    // 检查上传文件大小限制 (100MB)
     document.getElementById('paperFile').addEventListener('change', function() {
       const file = this.files[0];
       if (file) {
         const fileSizeMB = file.size / (1024 * 1024);
         if (fileSizeMB > MAX_FILE_SIZE_MB) {
           alert(`⚠️ 檔案過大！\n你選擇的檔案大小為 ${fileSizeMB.toFixed(1)}MB，已超過上限 ${MAX_FILE_SIZE_MB}MB。\n請壓縮檔案或使用 Google Drive 連結上傳！`);
-          this.value = ''; // 清空已选文件
+          this.value = '';
         }
       }
     });
