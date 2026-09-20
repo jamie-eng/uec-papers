@@ -43,8 +43,6 @@
       width: 100%; max-width: 480px; padding: 16px 20px;
       display: flex; align-items: center; justify-content: space-between;
       position: sticky; top: 0; background-color: var(--bg-color); z-index: 10;
-      <a href="admin.html" style="text-decoration:none; color:inherit; font-size:12px; opacity:0.6;">⚙️ Admin</a>
-
     }
 
     .header-left { display: flex; align-items: center; gap: 12px; }
@@ -81,7 +79,7 @@
 
     .form-group { margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
     .form-group label { font-size: 14px; font-weight: 600; }
-    .form-group input, .form-group select {
+    .form-group input {
       width: 100%; padding: 10px 12px; border: 1px solid var(--border-color);
       background-color: var(--card-bg); color: var(--text-color); border-radius: 8px; font-size: 14px; outline: none;
     }
@@ -120,13 +118,14 @@
       <h1 class="header-title">統考預試試卷<br>收集站</h1>
     </div>
     <div class="header-right">
+      <a href="admin.html" style="text-decoration:none; font-size:12px; margin-right:8px; opacity:0.6; color:inherit;">⚙️ 管理</a>
       <button class="icon-btn" id="theme-toggle">
-        <svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line></svg>
+        <svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="23" y2="12"></line></svg>
       </button>
     </div>
   </header>
 
-  <!-- 主菜单 -->
+  <!-- 主菜單 -->
   <main id="main-menu">
     <div class="card" id="btn-upload">
       <svg class="card-icon" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"></path><line x1="4" y1="21" x2="20" y2="21"></line></svg>
@@ -142,7 +141,7 @@
     </div>
   </main>
 
-  <!-- 上传页面 -->
+  <!-- 上傳頁面 -->
   <main id="upload-view" class="view-section">
     <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
     <div class="section-title">↑ 上傳考卷</div>
@@ -153,7 +152,7 @@
       </div>
       <div class="form-group">
         <label>年份 (Year)</label>
-        <input type="number" id="paperYear" required value="2026" placeholder="例如: 2026, 2025, 2024..." />
+        <input type="number" id="paperYear" required value="2026" placeholder="例如: 2026, 2025..." />
       </div>
       <div class="form-group">
         <label>科目 (Subject)</label>
@@ -163,33 +162,15 @@
         <label>學校 (School)</label>
         <input type="text" id="schoolName" required placeholder="例如: 巴生興華中學" />
       </div>
-      
-      <!-- 上传类型切换：支持 Drive 链接或 PDF 文件 -->
       <div class="form-group">
-        <label>提供方式 (Type)</label>
-        <select id="uploadType" onchange="toggleUploadType()">
-          <option value="link">Google Drive / 雲端連結</option>
-          <option value="file">上傳 PDF 文件</option>
-        </select>
-      </div>
-
-      <!-- 链接输入框 -->
-      <div class="form-group" id="group-link">
         <label>考卷下載連結 (Download Link)</label>
-        <input type="url" id="downloadUrl" placeholder="https://drive.google.com/..." />
+        <input type="url" id="downloadUrl" required placeholder="https://drive.google.com/..." />
       </div>
-
-      <!-- 本地文件上传框 -->
-      <div class="form-group" id="group-file" style="display: none;">
-        <label>選擇 PDF 文件</label>
-        <input type="file" id="fileInput" accept=".pdf" />
-      </div>
-
-      <button type="submit" class="btn-submit" id="submit-btn">上傳並發佈</button>
+      <button type="submit" class="btn-submit" id="submit-btn">上傳同步到 Firebase 雲端</button>
     </form>
   </main>
 
-  <!-- 下载列表页面 -->
+  <!-- 下載列表頁面 -->
   <main id="download-view" class="view-section">
     <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
     <div class="section-title" id="download-title">↓ 下載考卷</div>
@@ -208,10 +189,12 @@
   </main>
 
   <script>
-    let inMemoryPapers = [];
+    // Firebase Realtime Database API URL
+    const DB_URL = "https://uec-papers-default-rtdb.firebaseio.com/papers.json";
+
+    let currentCategory = '2026';
 
     document.getElementById('theme-toggle').onclick = () => document.body.classList.toggle('dark-mode');
-
     const mainMenu = document.getElementById('main-menu');
     const uploadView = document.getElementById('upload-view');
     const downloadView = document.getElementById('download-view');
@@ -230,147 +213,105 @@
     document.getElementById('btn-download-2026').onclick = () => openDownloadPage('2026');
     document.getElementById('btn-download-old').onclick = () => openDownloadPage('old');
 
-    // 切换输入框类型 (Drive 链接 或 PDF 文件)
-    function toggleUploadType() {
-      const type = document.getElementById('uploadType').value;
-      if (type === 'link') {
-        document.getElementById('group-link').style.display = 'flex';
-        document.getElementById('group-file').style.display = 'none';
-      } else {
-        document.getElementById('group-link').style.display = 'none';
-        document.getElementById('group-file').style.display = 'flex';
-      }
-    }
-
     function openDownloadPage(category) {
       mainMenu.style.display = 'none';
       downloadView.style.display = 'block';
-      if (category === '2026') {
-        document.getElementById('download-title').innerText = `↓ 下載考卷 (2026)`;
-      } else {
-        document.getElementById('download-title').innerText = `↓ 下載考卷 (2025 及之前)`;
-      }
-      renderPapers(category);
+      currentCategory = category;
+      document.getElementById('download-title').innerText = category === '2026' ? '↓ 下載考卷 (2026)' : '↓ 下載考卷 (2025 及之前)';
+      fetchPapers();
     }
 
-    function getStoredPapers() {
+    // 从 Firebase 读取试卷列表
+    async function fetchPapers() {
+      const listContainer = document.getElementById('papers-list');
+      listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px;">資料載入中...</td></tr>';
+
       try {
-        const data = localStorage.getItem('uec_papers_data');
-        return data ? JSON.parse(data) : inMemoryPapers;
-      } catch (e) {
-        return inMemoryPapers;
-      }
-    }
-
-    function saveStoredPapers(data) {
-      inMemoryPapers = data;
-      try {
-        localStorage.setItem('uec_papers_data', JSON.stringify(data));
-      } catch (e) {
-        console.warn('localStorage 不可用');
-      }
-    }
-
-    // 渲染试卷
-    function renderPapers(category) {
-      const allPapers = getStoredPapers();
-      
-      // 年份过滤分类：2026归入2026专区，其余（2025、2024、2023等）全部归入 old 专区
-      const papers = allPapers.filter(p => {
-        const y = parseInt(p.year);
-        if (category === '2026') {
-          return y === 2026;
-        } else {
-          return y <= 2025 || isNaN(y);
+        const response = await fetch(DB_URL);
+        const data = await response.json();
+        
+        let papers = [];
+        if (data) {
+          papers = Object.keys(data).map(key => ({
+            id: key,
+            ...data[key]
+          }));
         }
+
+        renderPapers(papers, currentCategory);
+      } catch (err) {
+        console.error(err);
+        listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px; color:red;">載入失敗，請檢查網路。</td></tr>';
+      }
+    }
+
+    function renderPapers(data, category) {
+      const filtered = data.filter(p => {
+        const y = parseInt(p.year);
+        return category === '2026' ? y === 2026 : (y <= 2025 || isNaN(y));
       });
 
       const listContainer = document.getElementById('papers-list');
       listContainer.innerHTML = '';
 
-      if (papers.length === 0) {
+      if (filtered.length === 0) {
         listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px;">暫無此分類的考卷數據</td></tr>';
         return;
       }
 
-      papers.forEach(item => {
+      filtered.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>
-            <span class="year-tag">${escapeHtml(item.year)}</span>
-            <b>${escapeHtml(item.subject)}</b>
-          </td>
+          <td><span class="year-tag">${escapeHtml(item.year)}</span><b>${escapeHtml(item.subject)}</b></td>
           <td>${escapeHtml(item.school)}<div class="uploader-tag">由 ${escapeHtml(item.uploader)} 上傳</div></td>
-          <td><a href="${escapeHtml(item.link)}" target="_blank" class="download-icon" download="paper.pdf">↓</a></td>
+          <td><a href="${escapeHtml(item.link)}" target="_blank" rel="noopener" class="download-icon">↓</a></td>
         `;
         listContainer.appendChild(tr);
       });
     }
 
-    // 表单提交处理：同时支持文件读取与链接保存
-    document.getElementById('upload-form').addEventListener('submit', function(e) {
+    // 上传新增考卷到 Firebase
+    document.getElementById('upload-form').addEventListener('submit', async function(e) {
       e.preventDefault();
-
       const submitBtn = document.getElementById('submit-btn');
-      const uploadType = document.getElementById('uploadType').value;
-      
-      const uploader = document.getElementById('uploaderName').value;
-      const year = document.getElementById('paperYear').value.trim();
-      const subject = document.getElementById('subjectName').value;
-      const school = document.getElementById('schoolName').value;
+      submitBtn.disabled = true;
+      submitBtn.innerText = '正在同步至 Firebase 雲端...';
 
-      function savePaperObj(downloadLink) {
-        const newPaper = {
-          id: Date.now(),
-          uploader: uploader,
-          year: year,
-          subject: subject,
-          school: school,
-          link: downloadLink
-        };
+      const newPaper = {
+        uploader: document.getElementById('uploaderName').value,
+        year: document.getElementById('paperYear').value.trim(),
+        subject: document.getElementById('subjectName').value,
+        school: document.getElementById('schoolName').value,
+        link: document.getElementById('downloadUrl').value,
+        createdAt: Date.now()
+      };
 
-        const papers = getStoredPapers();
-        papers.push(newPaper);
-        saveStoredPapers(papers);
+      try {
+        const response = await fetch(DB_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newPaper)
+        });
 
-        submitBtn.innerText = '✓ 上傳成功！';
-        submitBtn.classList.add('success');
-        submitBtn.disabled = true;
+        if (response.ok) {
+          submitBtn.innerText = '✓ 上傳成功！';
+          submitBtn.classList.add('success');
 
-        // 清空提交框，保留名字和年份，方便继续录入下一科
-        document.getElementById('subjectName').value = '';
-        document.getElementById('downloadUrl').value = '';
-        document.getElementById('fileInput').value = '';
+          document.getElementById('subjectName').value = '';
+          document.getElementById('downloadUrl').value = '';
 
-        setTimeout(() => {
-          submitBtn.innerText = '上傳並發佈';
-          submitBtn.classList.remove('success');
-          submitBtn.disabled = false;
-        }, 1500);
-      }
-
-      if (uploadType === 'link') {
-        const link = document.getElementById('downloadUrl').value;
-        if (!link) {
-          alert('請輸入下載連結！');
-          return;
+          setTimeout(() => {
+            submitBtn.innerText = '上傳同步到 Firebase 雲端';
+            submitBtn.classList.remove('success');
+            submitBtn.disabled = false;
+          }, 1500);
+        } else {
+          throw new Error('Upload failed');
         }
-        savePaperObj(link);
-      } else {
-        const fileInput = document.getElementById('fileInput');
-        if (fileInput.files.length === 0) {
-          alert('請先選擇一個 PDF 文件！');
-          return;
-        }
-        
-        const file = fileInput.files[0];
-        const reader = new FileReader();
-        submitBtn.innerText = '正在處理文件...';
-        
-        reader.onload = function(evt) {
-          savePaperObj(evt.target.result); // 转成 Base64 Data URL 存储
-        };
-        reader.readAsDataURL(file);
+      } catch (err) {
+        alert('上傳失敗，請稍後重試！');
+        submitBtn.innerText = '上傳同步到 Firebase 雲端';
+        submitBtn.disabled = false;
       }
     });
 
