@@ -84,6 +84,8 @@
       background-color: var(--card-bg); color: var(--text-color); border-radius: 8px; font-size: 14px; outline: none;
     }
 
+    .file-hint { font-size: 11px; opacity: 0.6; margin-top: -2px; }
+
     .btn-submit {
       width: 100%; background-color: var(--primary-btn); color: white; border: none;
       padding: 12px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 8px;
@@ -103,11 +105,11 @@
     body.dark-mode .year-tag { background: #444; color: #fff; }
     
     .uploader-tag { font-size: 11px; opacity: 0.7; font-weight: normal; margin-top: 4px; }
-    .download-btn { cursor: pointer; border: none; color: var(--text-color); font-size: 16px; font-weight: bold; background: var(--header-purple); padding: 6px 14px; border-radius: 6px; display: inline-block; }
+    .download-btn { cursor: pointer; border: none; color: var(--header-text); font-size: 13px; font-weight: bold; background: var(--header-purple); padding: 6px 12px; border-radius: 6px; display: inline-block; }
 
     .or-divider { text-align: center; font-size: 12px; opacity: 0.5; margin: 6px 0; }
 
-    /* Modal 全屏查看器 */
+    /* Modal 弹窗查看器 */
     .modal {
       display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%;
       background-color: rgba(0,0,0,0.85); flex-direction: column; align-items: center; justify-content: center; padding: 10px;
@@ -118,7 +120,7 @@
     .modal-close { background: none; border: none; color: white; font-size: 28px; cursor: pointer; }
     .modal-body {
       width: 100%; max-width: 600px; height: 80vh; background: #fff; border-radius: 12px; overflow: hidden;
-      display: flex; justify-content: center; align-items: center;
+      display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative;
     }
     .modal-body img { max-width: 100%; max-height: 100%; object-fit: contain; }
     .modal-body iframe { width: 100%; height: 100%; border: none; }
@@ -184,6 +186,7 @@
       <div class="form-group">
         <label>📁 選擇本地檔案 (PDF / 圖片)</label>
         <input type="file" id="paperFile" accept=".pdf,image/*" />
+        <span class="file-hint">⚠️ 本地文件大小上限：<b>100MB</b></span>
       </div>
 
       <div class="or-divider">── 或填寫網絡連結 ──</div>
@@ -226,6 +229,7 @@
 
   <script>
     const DB_URL = "https://uec-papers-default-rtdb.firebaseio.com/papers.json";
+    const MAX_FILE_SIZE_MB = 100; // 最大文件上限设为 100MB
     let currentCategory = '2026';
     let papersData = [];
 
@@ -297,13 +301,13 @@
         tr.innerHTML = `
           <td><span class="year-tag">${escapeHtml(item.year)}</span><b>${escapeHtml(item.subject)}</b></td>
           <td>${escapeHtml(item.school)}<div class="uploader-tag">由 ${escapeHtml(item.uploader)} 上傳</div></td>
-          <td><button class="download-btn" onclick="openViewer('${item.id}')">↓ 查看</button></td>
+          <td><button class="download-btn" onclick="openViewer('${item.id}')">👁️ 查看 / 下載</button></td>
         `;
         listContainer.appendChild(tr);
       });
     }
 
-    // 内置查看器逻辑
+    // 全屏查看器逻辑
     function openViewer(id) {
       const paper = papersData.find(p => p.id === id);
       if (!paper || !paper.link) {
@@ -321,17 +325,17 @@
       const link = paper.link;
 
       if (link.startsWith('data:image/')) {
-        // 预览Base64图片
+        // 图像预览
         const img = document.createElement('img');
         img.src = link;
         modalBody.appendChild(img);
       } else if (link.startsWith('data:application/pdf')) {
-        // 预览Base64 PDF
+        // PDF 预览
         const iframe = document.createElement('iframe');
         iframe.src = link;
         modalBody.appendChild(iframe);
       } else {
-        // 预览常规外链（Google Drive等）
+        // 外部链接 (Google Drive等) 直接在新页面打开
         window.open(link, '_blank');
         return;
       }
@@ -344,7 +348,19 @@
       document.getElementById('modal-body').innerHTML = '';
     }
 
-    // 上传表单逻辑
+    // 检查上传文件大小限制
+    document.getElementById('paperFile').addEventListener('change', function() {
+      const file = this.files[0];
+      if (file) {
+        const fileSizeMB = file.size / (1024 * 1024);
+        if (fileSizeMB > MAX_FILE_SIZE_MB) {
+          alert(`⚠️ 檔案過大！\n你選擇的檔案大小為 ${fileSizeMB.toFixed(1)}MB，已超過上限 ${MAX_FILE_SIZE_MB}MB。\n請壓縮檔案或使用 Google Drive 連結上傳！`);
+          this.value = ''; // 清空已选文件
+        }
+      }
+    });
+
+    // 表单提交逻辑
     document.getElementById('upload-form').addEventListener('submit', async function(e) {
       e.preventDefault();
       const submitBtn = document.getElementById('submit-btn');
@@ -353,6 +369,12 @@
 
       if (!fileInput.files[0] && !urlInput.value.trim()) {
         alert("請選擇本地檔案，或者填寫下載連結！");
+        return;
+      }
+
+      const file = fileInput.files[0];
+      if (file && (file.size / (1024 * 1024)) > MAX_FILE_SIZE_MB) {
+        alert(`檔案超過 ${MAX_FILE_SIZE_MB}MB 限制，無法上傳！`);
         return;
       }
 
@@ -398,7 +420,7 @@
           throw new Error('Upload failed');
         }
       } catch (err) {
-        alert('上傳失敗，请确认文件大小不要过大！');
+        alert('上傳失敗！可能是因為檔案數據超出限制，建議大檔案使用 Google Drive 連結提交！');
         submitBtn.innerText = '上傳同步到 Firebase 雲端';
         submitBtn.disabled = false;
       }
