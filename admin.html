@@ -18,18 +18,24 @@
 
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background-color: var(--bg-color); color: var(--text-color); display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; }
-    .admin-container { width: 100%; max-width: 480px; }
+    .admin-container { width: 100%; max-width: 600px; }
     .card { background-color: var(--card-bg); border-radius: 16px; box-shadow: var(--shadow); padding: 24px; margin-top: 20px; display: flex; flex-direction: column; gap: 16px; }
     h2 { font-size: 20px; text-align: center; }
     .form-group { display: flex; flex-direction: column; gap: 6px; }
-    input { padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; outline: none; }
-    button { padding: 12px; border-radius: 8px; border: none; background-color: #4a3b68; color: white; font-weight: bold; font-size: 15px; cursor: pointer; }
+    input[type="password"] { padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; outline: none; }
+    button { padding: 10px 14px; border-radius: 8px; border: none; background-color: #4a3b68; color: white; font-weight: bold; font-size: 14px; cursor: pointer; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-delete { background-color: var(--danger-btn); padding: 6px 10px; font-size: 12px; border-radius: 6px; }
-    .table-wrapper { border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); margin-top: 10px; }
+    .btn-action { background-color: #4a3b68; padding: 4px 8px; font-size: 12px; border-radius: 4px; }
+    .btn-move { background-color: #e0e0e0; color: #333; padding: 4px 8px; font-size: 12px; border-radius: 4px; margin: 2px 0; }
+    .btn-move:hover { background-color: #ccc; }
+    .table-wrapper { border-radius: 12px; overflow-x: auto; border: 1px solid var(--border-color); margin-top: 10px; }
     table { width: 100%; border-collapse: collapse; text-align: center; font-size: 13px; }
-    th { background-color: var(--header-purple); color: var(--header-text); padding: 10px 4px; font-weight: 700; }
-    td { padding: 10px 4px; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
+    th { background-color: var(--header-purple); color: var(--header-text); padding: 10px 6px; font-weight: 700; }
+    td { padding: 10px 6px; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
     .error-msg { color: var(--danger-btn); font-size: 13px; text-align: center; display: none; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .link-btn { text-decoration: none; color: #1976d2; font-weight: bold; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -46,13 +52,24 @@
 
     <div id="panel-card" class="card" style="display: none;">
       <h2>👑 Firebase 試卷數據管理中心</h2>
-      <button onclick="logoutAdmin()" style="background-color: #777; padding: 6px; font-size: 12px;">登出</button>
+      
+      <div class="toolbar">
+        <button onclick="logoutAdmin()" style="background-color: #777; padding: 6px 12px; font-size: 12px;">登出</button>
+        <div>
+          <button onclick="deleteSelected()" class="btn-delete">刪除已選取</button>
+          <button onclick="loadPapers()" class="btn-action">重新整理</button>
+        </div>
+      </div>
+
       <div class="table-wrapper">
         <table>
           <thead>
             <tr>
+              <th><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)"></th>
+              <th>排序</th>
               <th>年份/科目</th>
               <th>學校/上載者</th>
+              <th>連結</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -65,6 +82,7 @@
   <script>
     const DB_BASE_URL = "https://uec-papers-default-rtdb.firebaseio.com/papers";
     const ADMIN_PASS = "Yitwan6988";
+    let paperList = [];
 
     function loginAdmin() {
       const pass = document.getElementById('adminPassword').value;
@@ -84,7 +102,8 @@
 
     async function loadPapers() {
       const tbody = document.getElementById('admin-papers-list');
-      tbody.innerHTML = '<tr><td colspan="3" style="padding:16px;">載入 Firebase 數據中...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="padding:16px;">載入 Firebase 數據中...</td></tr>';
+      document.getElementById('selectAll').checked = false;
 
       try {
         const response = await fetch(`${DB_BASE_URL}.json`);
@@ -92,31 +111,89 @@
         
         tbody.innerHTML = '';
         if (!data) {
-          tbody.innerHTML = '<tr><td colspan="3" style="padding:16px;">目前 Firebase 沒有任何試卷數據</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6" style="padding:16px;">目前 Firebase 沒有任何試卷數據</td></tr>';
+          paperList = [];
           return;
         }
 
-        Object.keys(data).forEach(id => {
-          const item = data[id];
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>[${escapeHtml(item.year)}]<br><b>${escapeHtml(item.subject)}</b></td>
-            <td>${escapeHtml(item.school)}<br><small style="opacity:0.7">${escapeHtml(item.uploader)}</small></td>
-            <td><button class="btn-delete" onclick="deletePaper('${id}')">刪除</button></td>
-          `;
-          tbody.appendChild(tr);
+        // Store into array for order management
+        paperList = Object.keys(data).map(id => ({
+          id: id,
+          ...data[id]
+        }));
+
+        renderTable();
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="6" style="padding:16px; color:red;">載入失敗</td></tr>';
+      }
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('admin-papers-list');
+      tbody.innerHTML = '';
+
+      if (paperList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="padding:16px;">目前 Firebase 沒有任何試卷數據</td></tr>';
+        return;
+      }
+
+      paperList.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        
+        const fileUrl = item.url || item.fileUrl || item.link || '';
+        const linkHtml = fileUrl 
+          ? `<a href="${escapeHtml(fileUrl)}" target="_blank" class="link-btn">查看/下載</a>`
+          : '<span style="opacity:0.5">-</span>';
+
+        tr.innerHTML = `
+          <td><input type="checkbox" class="paper-select" value="${item.id}"></td>
+          <td>
+            <button class="btn-move" onclick="movePaper(${index}, -1)" ${index === 0 ? 'disabled' : ''}>▲</button><br>
+            <button class="btn-move" onclick="movePaper(${index}, 1)" ${index === paperList.length - 1 ? 'disabled' : ''}>▼</button>
+          </td>
+          <td>[${escapeHtml(item.year)}]<br><b>${escapeHtml(item.subject)}</b></td>
+          <td>${escapeHtml(item.school)}<br><small style="opacity:0.7">${escapeHtml(item.uploader)}</small></td>
+          <td>${linkHtml}</td>
+          <td><button class="btn-delete" onclick="deletePaper('${item.id}')">刪除</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function movePaper(index, direction) {
+      const newIndex = index + direction;
+      if (newIndex < 0 || newIndex >= paperList.length) return;
+
+      // Swap positions in local array
+      const temp = paperList[index];
+      paperList[index] = paperList[newIndex];
+      paperList[newIndex] = temp;
+
+      // Re-render UI immediately
+      renderTable();
+
+      // Persist full new order to Firebase
+      try {
+        const payload = {};
+        paperList.forEach(item => {
+          const { id, ...data } = item;
+          payload[id] = data;
+        });
+        await fetch(`${DB_BASE_URL}.json`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
         });
       } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="3" style="padding:16px; color:red;">載入失敗</td></tr>';
+        alert('位置調整同步失敗，請重新整理！');
+        loadPapers();
       }
     }
 
     async function deletePaper(id) {
       if (confirm('確定要從 Firebase 雲端刪除這份試卷嗎？')) {
         try {
-          const response = await fetch(`${DB_BASE_URL}/${id}.json`, {
-            method: 'DELETE'
-          });
+          const response = await fetch(`${DB_BASE_URL}/${id}.json`, { method: 'DELETE' });
           if (response.ok) {
             loadPapers();
           } else {
@@ -128,8 +205,34 @@
       }
     }
 
+    async function deleteSelected() {
+      const checkboxes = document.querySelectorAll('.paper-select:checked');
+      if (checkboxes.length === 0) {
+        alert('請先勾選要刪除的試卷！');
+        return;
+      }
+
+      if (confirm(`確定要刪除選取的 ${checkboxes.length} 份試卷嗎？`)) {
+        try {
+          const promises = Array.from(checkboxes).map(cb => 
+            fetch(`${DB_BASE_URL}/${cb.value}.json`, { method: 'DELETE' })
+          );
+          await Promise.all(promises);
+          loadPapers();
+        } catch (err) {
+          alert('批量刪除部分失敗，請重新整理！');
+          loadPapers();
+        }
+      }
+    }
+
+    function toggleSelectAll(master) {
+      const checkboxes = document.querySelectorAll('.paper-select');
+      checkboxes.forEach(cb => cb.checked = master.checked);
+    }
+
     function escapeHtml(str) {
-      return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      return (str || '').toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
   </script>
 </body>
