@@ -12,28 +12,39 @@
       --shadow: 0 4px 16px rgba(0,0,0,0.08);
       --border-color: #e2e2e2;
       --danger-btn: #d32f2f;
+      --primary-btn: #4a3b68;
+      --edit-btn: #1976d2;
       --header-purple: #f0ebf8;
       --header-text: #4a3b68;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background-color: var(--bg-color); color: var(--text-color); display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; }
-    .admin-container { width: 100%; max-width: 680px; }
+    .admin-container { width: 100%; max-width: 720px; }
     .card { background-color: var(--card-bg); border-radius: 16px; box-shadow: var(--shadow); padding: 24px; margin-top: 20px; display: flex; flex-direction: column; gap: 16px; }
     h2 { font-size: 20px; text-align: center; }
     .form-group { display: flex; flex-direction: column; gap: 6px; }
-    input[type="password"], select { padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; outline: none; }
-    button { padding: 8px 14px; border-radius: 8px; border: none; background-color: #4a3b68; color: white; font-weight: bold; font-size: 13px; cursor: pointer; }
-    .btn-delete { background-color: var(--danger-btn); padding: 6px 10px; font-size: 12px; border-radius: 6px; }
-    .btn-action { background-color: #4a3b68; padding: 6px 12px; font-size: 12px; border-radius: 6px; }
+    input, select { padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; outline: none; }
+    button { padding: 8px 14px; border-radius: 8px; border: none; background-color: var(--primary-btn); color: white; font-weight: bold; font-size: 13px; cursor: pointer; }
+    
+    .btn-delete { background-color: var(--danger-btn); padding: 5px 8px; font-size: 12px; border-radius: 6px; }
+    .btn-edit { background-color: var(--edit-btn); padding: 5px 8px; font-size: 12px; border-radius: 6px; margin-right: 4px; }
+    .btn-action { background-color: var(--primary-btn); padding: 6px 12px; font-size: 12px; border-radius: 6px; }
+    
     .table-wrapper { border-radius: 12px; overflow-x: auto; border: 1px solid var(--border-color); margin-top: 10px; }
     table { width: 100%; border-collapse: collapse; text-align: center; font-size: 13px; }
     th { background-color: var(--header-purple); color: var(--header-text); padding: 10px 6px; font-weight: 700; }
     td { padding: 10px 6px; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
     .error-msg { color: var(--danger-btn); font-size: 13px; text-align: center; display: none; }
+    
     .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; background-color: #f9f9fb; padding: 12px; border-radius: 10px; border: 1px solid var(--border-color); }
     .filter-group { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: bold; }
-    .link-btn { text-decoration: none; color: #1976d2; font-weight: bold; font-size: 12px; }
+    .link-btn { text-decoration: none; color: var(--edit-btn); font-weight: bold; font-size: 12px; }
+
+    /* Modal 彈出編輯視窗樣式 */
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+    .modal-card { background: white; padding: 24px; border-radius: 16px; width: 90%; max-width: 400px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow); }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -81,6 +92,39 @@
           </thead>
           <tbody id="admin-papers-list"></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 修改分類 / 資訊視窗 Modal -->
+  <div id="editModal" class="modal-overlay">
+    <div class="modal-card">
+      <h3>✏️ 修改試卷分類與資訊</h3>
+      <input type="hidden" id="editPaperId">
+      
+      <div class="form-group">
+        <label style="font-size: 12px; font-weight: bold;">年份 (Year):</label>
+        <input type="text" id="editYear" placeholder="例: 2026 或 2025">
+      </div>
+
+      <div class="form-group">
+        <label style="font-size: 12px; font-weight: bold;">科目 (Subject):</label>
+        <input type="text" id="editSubject" placeholder="例: 高級數學 / 華文">
+      </div>
+
+      <div class="form-group">
+        <label style="font-size: 12px; font-weight: bold;">學校 (School):</label>
+        <input type="text" id="editSchool" placeholder="例: 循人中學">
+      </div>
+
+      <div class="form-group">
+        <label style="font-size: 12px; font-weight: bold;">上載者 (Uploader):</label>
+        <input type="text" id="editUploader" placeholder="例: Student A">
+      </div>
+
+      <div class="modal-actions">
+        <button onclick="closeEditModal()" style="background-color: #888;">取消</button>
+        <button onclick="savePaperChanges()" style="background-color: var(--edit-btn);">保存修改</button>
       </div>
     </div>
   </div>
@@ -138,7 +182,6 @@
       const filterValue = document.getElementById('yearFilter').value;
       tbody.innerHTML = '';
 
-      // 根據下拉選單篩選年份 (2026 vs 2026以前)
       let filteredList = paperList.filter(item => {
         const paperYear = parseInt(item.year, 10);
         if (filterValue === '2026') {
@@ -146,7 +189,7 @@
         } else if (filterValue === 'before2026') {
           return paperYear < 2026 || (!isNaN(paperYear) && paperYear < 2026);
         }
-        return true; // 'all'
+        return true;
       });
 
       if (filteredList.length === 0) {
@@ -167,10 +210,59 @@
           <td>[${escapeHtml(item.year)}]<br><b>${escapeHtml(item.subject)}</b></td>
           <td>${escapeHtml(item.school)}<br><small style="opacity:0.7">${escapeHtml(item.uploader)}</small></td>
           <td>${linkHtml}</td>
-          <td><button class="btn-delete" onclick="deletePaper('${item.id}')">刪除</button></td>
+          <td>
+            <button class="btn-edit" onclick="openEditModal('${item.id}')">修改分類</button>
+            <button class="btn-delete" onclick="deletePaper('${item.id}')">刪除</button>
+          </td>
         `;
         tbody.appendChild(tr);
       });
+    }
+
+    // 開啟修改視窗
+    function openEditModal(id) {
+      const item = paperList.find(p => p.id === id);
+      if (!item) return;
+
+      document.getElementById('editPaperId').value = id;
+      document.getElementById('editYear').value = item.year || '';
+      document.getElementById('editSubject').value = item.subject || '';
+      document.getElementById('editSchool').value = item.school || '';
+      document.getElementById('editUploader').value = item.uploader || '';
+
+      document.getElementById('editModal').style.display = 'flex';
+    }
+
+    function closeEditModal() {
+      document.getElementById('editModal').style.display = 'none';
+    }
+
+    // 保存修改並更新到 Firebase
+    async function savePaperChanges() {
+      const id = document.getElementById('editPaperId').value;
+      const updatedData = {
+        year: document.getElementById('editYear').value.trim(),
+        subject: document.getElementById('editSubject').value.trim(),
+        school: document.getElementById('editSchool').value.trim(),
+        uploader: document.getElementById('editUploader').value.trim()
+      };
+
+      try {
+        const response = await fetch(`${DB_BASE_URL}/${id}.json`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedData)
+        });
+
+        if (response.ok) {
+          closeEditModal();
+          loadPapers(); // 重新讀取資料
+        } else {
+          alert('修改失敗！');
+        }
+      } catch (err) {
+        alert('修改失敗！');
+      }
     }
 
     async function deletePaper(id) {
