@@ -18,23 +18,21 @@
 
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background-color: var(--bg-color); color: var(--text-color); display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; }
-    .admin-container { width: 100%; max-width: 600px; }
+    .admin-container { width: 100%; max-width: 680px; }
     .card { background-color: var(--card-bg); border-radius: 16px; box-shadow: var(--shadow); padding: 24px; margin-top: 20px; display: flex; flex-direction: column; gap: 16px; }
     h2 { font-size: 20px; text-align: center; }
     .form-group { display: flex; flex-direction: column; gap: 6px; }
-    input[type="password"] { padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; outline: none; }
-    button { padding: 10px 14px; border-radius: 8px; border: none; background-color: #4a3b68; color: white; font-weight: bold; font-size: 14px; cursor: pointer; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    input[type="password"], select { padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; outline: none; }
+    button { padding: 8px 14px; border-radius: 8px; border: none; background-color: #4a3b68; color: white; font-weight: bold; font-size: 13px; cursor: pointer; }
     .btn-delete { background-color: var(--danger-btn); padding: 6px 10px; font-size: 12px; border-radius: 6px; }
-    .btn-action { background-color: #4a3b68; padding: 4px 8px; font-size: 12px; border-radius: 4px; }
-    .btn-move { background-color: #e0e0e0; color: #333; padding: 4px 8px; font-size: 12px; border-radius: 4px; margin: 2px 0; }
-    .btn-move:hover { background-color: #ccc; }
+    .btn-action { background-color: #4a3b68; padding: 6px 12px; font-size: 12px; border-radius: 6px; }
     .table-wrapper { border-radius: 12px; overflow-x: auto; border: 1px solid var(--border-color); margin-top: 10px; }
     table { width: 100%; border-collapse: collapse; text-align: center; font-size: 13px; }
     th { background-color: var(--header-purple); color: var(--header-text); padding: 10px 6px; font-weight: 700; }
     td { padding: 10px 6px; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
     .error-msg { color: var(--danger-btn); font-size: 13px; text-align: center; display: none; }
-    .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; background-color: #f9f9fb; padding: 12px; border-radius: 10px; border: 1px solid var(--border-color); }
+    .filter-group { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: bold; }
     .link-btn { text-decoration: none; color: #1976d2; font-weight: bold; font-size: 12px; }
   </style>
 </head>
@@ -54,10 +52,19 @@
       <h2>👑 Firebase 試卷數據管理中心</h2>
       
       <div class="toolbar">
-        <button onclick="logoutAdmin()" style="background-color: #777; padding: 6px 12px; font-size: 12px;">登出</button>
+        <div class="filter-group">
+          <label for="yearFilter">📅 年份分類：</label>
+          <select id="yearFilter" onchange="renderTable()">
+            <option value="all">全部年份 (All)</option>
+            <option value="2026">2026 年考卷</option>
+            <option value="before2026">2026 年以前 (2025 & 更早)</option>
+          </select>
+        </div>
+
         <div>
           <button onclick="deleteSelected()" class="btn-delete">刪除已選取</button>
           <button onclick="loadPapers()" class="btn-action">重新整理</button>
+          <button onclick="logoutAdmin()" style="background-color: #777; margin-left: 4px;">登出</button>
         </div>
       </div>
 
@@ -66,7 +73,6 @@
           <thead>
             <tr>
               <th><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)"></th>
-              <th>排序</th>
               <th>年份/科目</th>
               <th>學校/上載者</th>
               <th>連結</th>
@@ -102,7 +108,7 @@
 
     async function loadPapers() {
       const tbody = document.getElementById('admin-papers-list');
-      tbody.innerHTML = '<tr><td colspan="6" style="padding:16px;">載入 Firebase 數據中...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:16px;">載入 Firebase 數據中...</td></tr>';
       document.getElementById('selectAll').checked = false;
 
       try {
@@ -111,12 +117,11 @@
         
         tbody.innerHTML = '';
         if (!data) {
-          tbody.innerHTML = '<tr><td colspan="6" style="padding:16px;">目前 Firebase 沒有任何試卷數據</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="5" style="padding:16px;">目前 Firebase 沒有任何試卷數據</td></tr>';
           paperList = [];
           return;
         }
 
-        // Store into array for order management
         paperList = Object.keys(data).map(id => ({
           id: id,
           ...data[id]
@@ -124,20 +129,32 @@
 
         renderTable();
       } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="6" style="padding:16px; color:red;">載入失敗</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="padding:16px; color:red;">載入失敗</td></tr>';
       }
     }
 
     function renderTable() {
       const tbody = document.getElementById('admin-papers-list');
+      const filterValue = document.getElementById('yearFilter').value;
       tbody.innerHTML = '';
 
-      if (paperList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="padding:16px;">目前 Firebase 沒有任何試卷數據</td></tr>';
+      // 根據下拉選單篩選年份 (2026 vs 2026以前)
+      let filteredList = paperList.filter(item => {
+        const paperYear = parseInt(item.year, 10);
+        if (filterValue === '2026') {
+          return paperYear === 2026 || item.year === '2026';
+        } else if (filterValue === 'before2026') {
+          return paperYear < 2026 || (!isNaN(paperYear) && paperYear < 2026);
+        }
+        return true; // 'all'
+      });
+
+      if (filteredList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="padding:16px; opacity: 0.7;">該分類下沒有任何試卷數據</td></tr>';
         return;
       }
 
-      paperList.forEach((item, index) => {
+      filteredList.forEach(item => {
         const tr = document.createElement('tr');
         
         const fileUrl = item.url || item.fileUrl || item.link || '';
@@ -147,10 +164,6 @@
 
         tr.innerHTML = `
           <td><input type="checkbox" class="paper-select" value="${item.id}"></td>
-          <td>
-            <button class="btn-move" onclick="movePaper(${index}, -1)" ${index === 0 ? 'disabled' : ''}>▲</button><br>
-            <button class="btn-move" onclick="movePaper(${index}, 1)" ${index === paperList.length - 1 ? 'disabled' : ''}>▼</button>
-          </td>
           <td>[${escapeHtml(item.year)}]<br><b>${escapeHtml(item.subject)}</b></td>
           <td>${escapeHtml(item.school)}<br><small style="opacity:0.7">${escapeHtml(item.uploader)}</small></td>
           <td>${linkHtml}</td>
@@ -158,36 +171,6 @@
         `;
         tbody.appendChild(tr);
       });
-    }
-
-    async function movePaper(index, direction) {
-      const newIndex = index + direction;
-      if (newIndex < 0 || newIndex >= paperList.length) return;
-
-      // Swap positions in local array
-      const temp = paperList[index];
-      paperList[index] = paperList[newIndex];
-      paperList[newIndex] = temp;
-
-      // Re-render UI immediately
-      renderTable();
-
-      // Persist full new order to Firebase
-      try {
-        const payload = {};
-        paperList.forEach(item => {
-          const { id, ...data } = item;
-          payload[id] = data;
-        });
-        await fetch(`${DB_BASE_URL}.json`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-      } catch (err) {
-        alert('位置調整同步失敗，請重新整理！');
-        loadPapers();
-      }
     }
 
     async function deletePaper(id) {
