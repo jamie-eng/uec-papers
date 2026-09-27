@@ -115,9 +115,9 @@
     .btn-submit.success { background-color: var(--success-btn); }
 
     .table-wrapper { border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); }
-    table { width: 100%; border-collapse: collapse; text-align: center; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; text-align: center; font-size: 13px; }
     th { background-color: var(--header-purple); color: var(--header-text); padding: 12px 6px; font-weight: 700; border-bottom: 1px solid var(--border-color); }
-    td { padding: 12px 6px; vertical-align: middle; border-bottom: 1px solid var(--border-color); font-weight: 600; line-height: 1.3; }
+    td { padding: 10px 6px; vertical-align: middle; border-bottom: 1px solid var(--border-color); font-weight: 600; line-height: 1.3; }
     tr:nth-child(even) td { background-color: var(--row-even); }
     tr:nth-child(odd) td { background-color: var(--row-odd); }
     
@@ -146,17 +146,19 @@
     .modal-body img { max-width: 100%; max-height: 100%; object-fit: contain; }
     .pdf-page-canvas { width: 100% !important; height: auto !important; margin-bottom: 10px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
 
-    /* Admin Modal Specifics */
+    /* Admin Panel Modal */
     .admin-modal-content {
-      background: var(--card-bg); color: var(--text-color); width: 95%; max-width: 720px; height: 85vh;
+      background: var(--card-bg); color: var(--text-color); width: 95%; max-width: 760px; height: 88vh;
       border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; box-shadow: var(--shadow);
     }
-    .status-badge { padding: 3px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; display: inline-block; }
+    .status-badge { padding: 3px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; display: inline-block; }
     .status-pending { background: #fff3cd; color: #856404; }
     .status-approved { background: #d4edda; color: #155724; }
-    .btn-delete { background-color: var(--danger-btn); padding: 5px 8px; font-size: 12px; border-radius: 6px; color: white; border: none; cursor: pointer; }
-    .btn-edit { background-color: var(--edit-btn); padding: 5px 8px; font-size: 12px; border-radius: 6px; color: white; border: none; cursor: pointer; margin-right: 4px; }
-    .btn-approve { background-color: var(--success-btn); padding: 5px 8px; font-size: 12px; border-radius: 6px; color: white; border: none; cursor: pointer; margin-right: 4px; }
+    
+    .action-btns { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; }
+    .btn-delete { background-color: var(--danger-btn); padding: 5px 7px; font-size: 11px; border-radius: 6px; color: white; border: none; cursor: pointer; }
+    .btn-edit { background-color: var(--edit-btn); padding: 5px 7px; font-size: 11px; border-radius: 6px; color: white; border: none; cursor: pointer; }
+    .btn-approve { background-color: var(--success-btn); padding: 5px 7px; font-size: 11px; border-radius: 6px; color: white; border: none; cursor: pointer; }
 
     svg { stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
   </style>
@@ -280,12 +282,12 @@
   <div id="admin-modal" class="modal">
     <div class="admin-modal-content">
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h2>👑 管理員審核後台</h2>
+        <h2>👑 管理員審核與排版後台</h2>
         <button class="modal-close" style="color:var(--text-color);" onclick="closeAdminModal()">&times;</button>
       </div>
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; background: #f9f9fb; padding: 10px; border-radius: 8px;">
         <div>
-          <label style="font-size: 13px; font-weight: bold;">篩選：</label>
+          <label style="font-size: 13px; font-weight: bold;">篩選狀態：</label>
           <select id="adminStatusFilter" onchange="renderAdminTable()" style="padding: 6px; border-radius: 6px;">
             <option value="pending" selected>待審核 (Pending)</option>
             <option value="approved">已通過</option>
@@ -301,8 +303,8 @@
               <th>狀態</th>
               <th>年份/科目</th>
               <th>學校/上載者</th>
-              <th>連結</th>
-              <th>操作</th>
+              <th>預覽</th>
+              <th>管理操作 (排/改/批)</th>
             </tr>
           </thead>
           <tbody id="admin-papers-list"></tbody>
@@ -566,20 +568,54 @@
         const tr = document.createElement('tr');
         const isAppr = item.approved === true;
         const badge = isAppr ? '<span class="status-badge status-approved">已通過</span>' : '<span class="status-badge status-pending">待審核</span>';
-        const approveBtn = !isAppr ? `<button class="btn-approve" onclick="approvePaper('${item.id}')">批准+1</button>` : '';
+        const approveBtn = !isAppr ? `<button class="btn-approve" onclick="approvePaper('${item.id}')">批准</button>` : '';
 
         tr.innerHTML = `
           <td>${badge}</td>
           <td>[${escapeHtml(item.year)}]<br><b>${escapeHtml(item.subject)}</b></td>
           <td>${escapeHtml(item.school)}<br><small>${escapeHtml(item.uploader)}</small></td>
-          <td><a href="${escapeHtml(item.link)}" target="_blank" style="color:var(--edit-btn);">預覽</a></td>
+          <td><a href="${escapeHtml(item.link)}" target="_blank" style="color:var(--edit-btn);">連結</a></td>
           <td>
-            ${approveBtn}
-            <button class="btn-delete" onclick="deleteAdminPaper('${item.id}')">刪除</button>
+            <div class="action-btns">
+              ${approveBtn}
+              <button class="btn-edit" onclick="editAdminPaper('${item.id}')">編輯</button>
+              <button class="btn-delete" onclick="deleteAdminPaper('${item.id}')">刪除</button>
+            </div>
           </td>
         `;
         tbody.appendChild(tr);
       });
+    }
+
+    async function editAdminPaper(id) {
+      const paper = adminPaperList.find(p => p.id === id);
+      if (!paper) return;
+
+      const newSubject = prompt("修改科目名稱:", paper.subject);
+      if (newSubject === null) return;
+      const newYear = prompt("修改年份 (例如 2026):", paper.year);
+      if (newYear === null) return;
+      const newSchool = prompt("修改學校名稱:", paper.school);
+      if (newSchool === null) return;
+      const newUploader = prompt("修改上載者姓名:", paper.uploader);
+      if (newUploader === null) return;
+
+      try {
+        await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subject: newSubject.trim(),
+            year: newYear.trim(),
+            school: newSchool.trim(),
+            uploader: newUploader.trim()
+          })
+        });
+        alert("資料修改成功！");
+        fetchAdminPapers();
+      } catch (err) {
+        alert("修改失敗");
+      }
     }
 
     async function approvePaper(id) {
@@ -608,7 +644,7 @@
           });
         }
 
-        alert("審批成功！");
+        alert("審批成功！已同步至主站下載列表。");
         fetchAdminPapers();
       } catch (err) {
         alert("操作失敗");
@@ -616,7 +652,7 @@
     }
 
     async function deleteAdminPaper(id) {
-      if (confirm("確定從雲端刪除此試卷？")) {
+      if (confirm("確定從雲端永久刪除此試卷？")) {
         await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, { method: 'DELETE' });
         fetchAdminPapers();
       }
