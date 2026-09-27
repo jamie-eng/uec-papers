@@ -106,7 +106,7 @@
       background-color: var(--card-bg); color: var(--text-color); border-radius: 8px; font-size: 14px; outline: none;
     }
 
-    .file-hint { font-size: 11px; opacity: 0.6; margin-top: -2px; }
+    .file-hint { font-size: 11px; color: #d97706; margin-top: -2px; font-weight: bold; }
 
     .btn-submit {
       width: 100%; background-color: var(--primary-btn); color: white; border: none;
@@ -243,7 +243,7 @@
       <div class="form-group">
         <label>📁 選擇本地檔案 (PDF / 圖片)</label>
         <input type="file" id="paperFile" accept=".pdf,image/*" />
-        <span class="file-hint">⚠️ 建議檔案小於 8MB</span>
+        <span class="file-hint">⚠️ 檔案大小限制：<b>最大 5MB</b>（超過請用下方雲端連結）</span>
       </div>
 
       <div class="or-divider">── 或填寫網絡連結 ──</div>
@@ -469,7 +469,7 @@
 
         const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${currentUser.uid}.json`;
         const userRes = await fetch(userRefUrl);
-        const userData = await userRes.json() || { uploadedCount: 0, unlockedIds: [] };
+        const userData = await userRes.json() || { unlockedIds: [] };
         const unlockedIds = userData.unlockedIds || [];
 
         const filtered = papersData.filter(p => {
@@ -501,7 +501,6 @@
         return;
       }
 
-      // 只顯示已經在此用戶解鎖名單內的考卷（不重複、隨機指定不重複）
       const visiblePapers = filteredData.filter(item => unlockedIds.includes(item.id));
       const lockedCount = Math.max(0, filteredData.length - visiblePapers.length);
 
@@ -654,7 +653,6 @@
       if (!paper) return;
 
       try {
-        // 1. 批准該筆試卷
         await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -664,32 +662,27 @@
           })
         });
 
-        // 2. 如果有上傳者 UID，幫他隨機解鎖一份【不重複自己】的已審核考卷
         if (paper.uploaderUid) {
           const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${paper.uploaderUid}.json`;
           const uRes = await fetch(userRefUrl);
           const userData = await uRes.json() || { unlockedIds: [] };
           let unlockedIds = userData.unlockedIds || [];
 
-          // 撈出所有已通過審核的考卷
           const allPapersRes = await fetch(DB_URL);
           const allPapersData = await allPapersRes.json() || {};
           
-          // 過濾出：1. 已批准 2. 不是自己上傳的 3. 還沒被該用戶解鎖過的
           const availablePapers = Object.keys(allPapersData).map(k => ({ id: k, ...allPapersData[k] })).filter(p => {
             if (p.approved !== true) return false;
-            if (p.uploaderUid === paper.uploaderUid) return false; // 排除自己上傳的
-            if (unlockedIds.includes(p.id)) return false; // 排除已經解鎖過的
+            if (p.uploaderUid === paper.uploaderUid) return false;
+            if (unlockedIds.includes(p.id)) return false;
             return true;
           });
 
           if (availablePapers.length > 0) {
-            // 隨機挑選一份
             const randomIndex = Math.floor(Math.random() * availablePapers.length);
             const selectedPaper = availablePapers[randomIndex];
             unlockedIds.push(selectedPaper.id);
 
-            // 更新用戶的解鎖清單
             await fetch(userRefUrl, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
@@ -697,7 +690,6 @@
             });
             alert(`審批成功！已為上傳者隨機解鎖考卷：${selectedPaper.subject} (${selectedPaper.school})`);
           } else {
-            // 如果沒有其他人的考卷可解鎖，把自己的這份加進去（避免沒得看）
             if (!unlockedIds.includes(id)) {
               unlockedIds.push(id);
               await fetch(userRefUrl, {
@@ -801,19 +793,18 @@
         return;
       }
 
+      // 嚴格限制檔案大小小於 5MB
+      if (fileInput.files[0] && fileInput.files[0].size > 5 * 1024 * 1024) {
+        alert("檔案大小超過 5MB！伺服器無法儲存過大的檔案。請改用 Google Drive 等雲端硬碟連結來分享！");
+        return;
+      }
+
       const submitBtn = document.getElementById('submit-btn');
       submitBtn.disabled = true;
       submitBtn.innerText = '上傳中...';
 
       let fileUrl = urlInput.value.trim();
       if (fileInput.files[0]) {
-        if (fileInput.files[0].size > 8 * 1024 * 1024) {
-          alert("檔案大於 8MB，請使用 Google Drive 連結上傳！");
-          submitBtn.disabled = false;
-          submitBtn.innerText = '上傳送審 (需管理員審核)';
-          return;
-        }
-
         fileUrl = await new Promise((res) => {
           const reader = new FileReader();
           reader.onload = () => res(reader.result);
@@ -841,7 +832,7 @@
         });
 
         if (!response.ok) {
-          throw new Error(`伺服器回應錯誤碼: ${response.status}`);
+          throw new Error(`伺服器拒絕接收，可能是檔案過大 (${response.status})`);
         }
 
         submitBtn.innerText = '✓ 上傳成功';
@@ -859,7 +850,7 @@
           showMenu();
         }, 1000);
       } catch(err) {
-        alert("上傳失敗，原因：" + err.message);
+        alert("上傳失敗，原因：" + err.message + "\n\n💡 提示：大於 5MB 的檔案請改用 Google Drive 連結上傳！");
         submitBtn.disabled = false;
         submitBtn.innerText = '上傳送審 (需管理員審核)';
       }
