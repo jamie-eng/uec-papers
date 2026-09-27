@@ -77,7 +77,6 @@
 
     main { width: 100%; max-width: 480px; padding: 12px 20px; display: flex; flex-direction: column; gap: 14px; }
 
-    /* 跑馬燈告示欄 (求檔與留言信件) */
     .marquee-container {
       width: 100%; max-width: 480px; padding: 0 20px; margin-bottom: 4px;
       overflow: hidden; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 8px;
@@ -88,7 +87,6 @@
     .marquee-item { margin-right: 40px; display: inline-flex; align-items: center; gap: 6px; }
     @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 
-    /* 公開 Top 1-10 排行榜區塊 (僅顯示名字) */
     .public-leaderboard {
       background: var(--card-bg); border-radius: 16px; padding: 16px; box-shadow: var(--shadow);
       border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 8px;
@@ -216,13 +214,11 @@
     </div>
   </header>
 
-  <!-- 意見反饋與求檔信件跑馬燈 -->
   <div class="marquee-container" id="marquee-box">
     <div class="marquee-track" id="marquee-content"></div>
   </div>
 
   <main id="main-menu">
-    <!-- 公開 Top 1-10 排行榜 (僅顯示名字) -->
     <div class="public-leaderboard">
       <div class="public-leaderboard-title">🏆 貢獻英雄榜 (Top 1 - 10) —— 每月 1 號自動派發筆記獎勵</div>
       <div class="public-top10-items" id="public-top10-list">載入中...</div>
@@ -250,10 +246,15 @@
     </div>
   </main>
 
+  <!-- 登入/註冊動態表單 (強制 Username, Gmail, Password) -->
   <main id="auth-view" class="view-section">
     <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
     <div class="section-title" id="auth-title">🔐 帳號登入</div>
     <div id="auth-form">
+      <div class="form-group" id="reg-username-group" style="display: none;">
+        <label>用戶名 (Username)</label>
+        <input type="text" id="authUsername" placeholder="例如: SchoolStar" />
+      </div>
       <div class="form-group">
         <label>電子郵件 (Gmail)</label>
         <input type="email" id="authEmail" placeholder="example@gmail.com" />
@@ -271,10 +272,6 @@
     <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
     <div class="section-title">↑ 上傳考卷或筆記</div>
     <div id="upload-form">
-      <div class="form-group">
-        <label>上載者姓名 (Name)</label>
-        <input type="text" id="uploaderName" placeholder="例如: 小明" />
-      </div>
       <div class="form-group">
         <label>分類級別 (Category)</label>
         <select id="resourceCategory">
@@ -346,12 +343,8 @@
     <div class="section-title">✉️ 意見反饋與寫信求檔箱</div>
     <div id="feedback-form">
       <div class="form-group">
-        <label>您的稱呼或 Gmail (必填/選填)</label>
-        <input type="text" id="feedbackName" placeholder="例如：小明 / example@gmail.com" />
-      </div>
-      <div class="form-group">
         <label>寫信內容 / 想求的筆記或試卷需求</label>
-        <textarea id="feedbackContent" rows="4" placeholder="請在此寫信或留言，例如：「求筆記：初二地理總複習，我的Gmail是...」"></textarea>
+        <textarea id="feedbackContent" rows="4" placeholder="請在此寫信或留言，例如：「求筆記：初二地理總複習...」"></textarea>
       </div>
       <button type="button" class="btn-submit" id="feedback-submit-btn" onclick="handleFeedbackSubmit()">送出信件與需求</button>
     </div>
@@ -400,8 +393,8 @@
           <label style="font-size: 13px; font-weight: bold;">查看面板：</label>
           <select id="adminPanelTab" onchange="switchAdminTab()" style="padding: 6px; border-radius: 6px;">
             <option value="papers" selected>資源審核管理</option>
-            <option value="feedbacks" id="tab-option-feedbacks">寫信留言與求檔需求箱</option>
-            <option value="users">用戶名單 (UID/Gmail)、私信與封鎖</option>
+            <option value="feedbacks">寫信留言與求檔需求箱</option>
+            <option value="users">用戶名單 (Username/UID/Gmail)、私信與封鎖</option>
           </select>
         </div>
         <div id="paper-filter-container">
@@ -457,6 +450,7 @@
     let adminFeedbackList = [];
     let adminUsersList = [];
     let currentUser = null;
+    let currentUsername = "";
     let isRegisterMode = false;
 
     const forbiddenWords = ["粗口", "admin123", "hack", "spam", "敏感詞1", "色情"];
@@ -571,6 +565,41 @@
       }
     }
 
+    // 檢查用戶資料庫並確保已有 Username（針對舊帳號提供自動補填解決方案）
+    async function resolveUsername(user) {
+      if (!user) return "";
+      const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${user.uid}.json`;
+      try {
+        const res = await fetch(userRefUrl);
+        let uData = await res.json();
+        
+        if (uData && uData.username) {
+          return uData.username;
+        }
+
+        // 解決方案：若舊帳號沒有 username，彈出提示讓用戶補填
+        let newName = prompt(`⚠️ 系統升級：檢測到您的帳號尚未設定專屬 Username。\n請輸入您的 Username（用於英雄榜與上傳署名）：`, user.email.split('@')[0]);
+        if (!newName || !newName.trim()) {
+          newName = "學霸_" + user.uid.substring(0, 4);
+        }
+        newName = newName.trim();
+
+        if (!uData) uData = { email: user.email, unlockedIds: [] };
+        uData.username = newName;
+
+        await fetch(userRefUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(uData)
+        });
+
+        alert(`✓ Username 設定成功：${newName}`);
+        return newName;
+      } catch(e) {
+        return user.email.split('@')[0];
+      }
+    }
+
     firebase.auth().onAuthStateChanged(async (user) => {
       if (user) {
         const banned = await checkIsBanned(user.email);
@@ -578,12 +607,15 @@
           alert("⚠️ 此 Gmail 帳號已被管理員永久封鎖，無法登入！");
           await firebase.auth().signOut();
           currentUser = null;
+          currentUsername = "";
           updateLoginButton();
           return;
         }
         currentUser = user;
+        currentUsername = await resolveUsername(user);
       } else {
         currentUser = null;
+        currentUsername = "";
       }
       updateLoginButton();
     });
@@ -591,7 +623,7 @@
     function updateLoginButton() {
       const loginBtn = document.getElementById('login-status-btn');
       if (currentUser) {
-        loginBtn.innerText = "登出";
+        loginBtn.innerText = "登出 (" + currentUsername + ")";
         loginBtn.style.background = "#d32f2f";
       } else {
         loginBtn.innerText = "登入";
@@ -601,39 +633,54 @@
 
     function openAuthView() {
       if (currentUser) {
-        if (confirm(`目前已登入：${currentUser.email}\n確定要登出帳號嗎？`)) {
+        if (confirm(`目前已登入：${currentUsername} (${currentUser.email})\n確定要登出帳號嗎？`)) {
           firebase.auth().signOut().then(() => { showMenu(); });
         }
         return;
       }
+      isRegisterMode = false;
+      updateAuthFormUI();
       hideAllViews();
       document.getElementById('auth-view').style.display = 'block';
     }
 
     function toggleAuthMode() {
       isRegisterMode = !isRegisterMode;
+      updateAuthFormUI();
+    }
+
+    function updateAuthFormUI() {
       const title = document.getElementById('auth-title');
       const submitBtn = document.getElementById('auth-submit-btn');
       const switchText = document.getElementById('switch-auth-mode');
+      const usernameGroup = document.getElementById('reg-username-group');
 
       if (isRegisterMode) {
         title.innerText = "📝 免費帳號註冊";
         submitBtn.innerText = "確認註冊";
         switchText.innerText = "已有帳號？點此直接登入";
+        usernameGroup.style.display = "flex";
       } else {
         title.innerText = "🔐 帳號登入";
         submitBtn.innerText = "立即登入";
         switchText.innerText = "還沒有帳號？點此免費註冊";
+        usernameGroup.style.display = "none";
       }
     }
 
     async function handleAuth() {
       const email = document.getElementById('authEmail').value.trim();
       const password = document.getElementById('authPassword').value;
+      const usernameInput = document.getElementById('authUsername').value.trim();
       const submitBtn = document.getElementById('auth-submit-btn');
 
       if (!email || !password) {
         alert("請填寫電子郵件與密碼！");
+        return;
+      }
+
+      if (isRegisterMode && !usernameInput) {
+        alert("註冊時必須填寫 Username（用戶名）！");
         return;
       }
 
@@ -648,11 +695,18 @@
 
       try {
         if (isRegisterMode) {
+          if (aiContentFilter(usernameInput)) {
+            alert("⚠️ 您的 Username 包含違規或敏感字眼，已被 AI 安全過濾器攔截！");
+            submitBtn.disabled = false;
+            submitBtn.innerText = "確認註冊";
+            return;
+          }
+
           const userCred = await firebase.auth().createUserWithEmailAndPassword(email, password);
           await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${userCred.user.uid}.json`, {
-            method: 'PATCH',
+            method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email, unlockedIds: [] })
+            body: JSON.stringify({ email: email, username: usernameInput, unlockedIds: [] })
           });
           alert("註冊成功並已自動登入！");
         } else {
@@ -661,13 +715,14 @@
         }
         document.getElementById('authEmail').value = '';
         document.getElementById('authPassword').value = '';
+        document.getElementById('authUsername').value = '';
         openCopyrightModal();
         showMenu();
       } catch (err) {
         alert("操作失敗: " + err.message);
       } finally {
         submitBtn.disabled = false;
-        submitBtn.innerText = isRegisterMode ? "確認註冊" : "立即登入";
+        updateAuthFormUI();
       }
     }
 
@@ -703,6 +758,11 @@
     };
 
     document.getElementById('btn-feedback').onclick = () => {
+      if (!currentUser) {
+        alert("請先登入帳號才能使用意見反饋與求檔箱！");
+        openAuthView();
+        return;
+      }
       hideAllViews();
       feedbackView.style.display = 'block';
     };
@@ -827,7 +887,7 @@
       return map[cat] || '一般';
     }
 
-    // 取得公開的 Top 1-10 排行榜（僅顯示名字與排名）
+    // 取得公開的 Top 1-10 排行榜（使用 Username 顯示）
     async function fetchPublicLeaderboard() {
       try {
         const res = await fetch(DB_URL);
@@ -896,7 +956,6 @@
     }
 
     async function handleFeedbackSubmit() {
-      const name = document.getElementById('feedbackName').value.trim();
       const content = document.getElementById('feedbackContent').value.trim();
       const submitBtn = document.getElementById('feedback-submit-btn');
 
@@ -914,7 +973,7 @@
       submitBtn.innerText = '送出中...';
 
       const feedbackData = {
-        name: name || (currentUser ? currentUser.email : '匿名同學'),
+        name: currentUsername || (currentUser ? currentUser.email : '匿名同學'),
         content: content,
         createdAt: Date.now()
       };
@@ -929,7 +988,6 @@
         if (!res.ok) throw new Error("送出失敗");
 
         alert("成功送出信件與需求！內容已同步至管理員後台與首頁跑馬燈。");
-        document.getElementById('feedbackName').value = '';
         document.getElementById('feedbackContent').value = '';
         showMenu();
       } catch (err) {
@@ -1034,7 +1092,7 @@
         <tr>
           <th>狀態</th>
           <th>分類/科目</th>
-          <th>學校/上載者/Gmail/備註</th>
+          <th>學校/上載者(Username)/Gmail/備註</th>
           <th>檔案/連結</th>
           <th>管理操作</th>
         </tr>
@@ -1077,7 +1135,7 @@
         tr.innerHTML = `
           <td>${badge}</td>
           <td>[${getCategoryLabel(item.category)}]<b><br>${escapeHtml(item.subject)}</b></td>
-          <td>${escapeHtml(item.school)}<br><small>由 ${escapeHtml(item.uploader)} 上傳</small>${gmailInfo}${remarkHtml}${msgHtml}</td>
+          <td>${escapeHtml(item.school)}<br><small>由 <b>${escapeHtml(item.uploader)}</b> 上傳</small>${gmailInfo}${remarkHtml}${msgHtml}</td>
           <td>${fileActionHtml}</td>
           <td>
             <div class="action-btns">
@@ -1097,7 +1155,7 @@
       thead.innerHTML = `
         <tr>
           <th>時間</th>
-          <th>提交者</th>
+          <th>提交者 (Username)</th>
           <th>寫信與求檔內容</th>
           <th>操作</th>
         </tr>
@@ -1127,6 +1185,7 @@
       const thead = document.getElementById('admin-table-head');
       thead.innerHTML = `
         <tr>
+          <th>Username</th>
           <th>UID</th>
           <th>註冊 Gmail</th>
           <th>管理操作 (私信 / 封鎖)</th>
@@ -1135,13 +1194,14 @@
       tbody.innerHTML = '';
 
       if (adminUsersList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" style="padding:16px; opacity:0.6;">尚無註冊用戶紀錄</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" style="padding:16px; opacity:0.6;">尚無註冊用戶紀錄</td></tr>';
         return;
       }
 
       adminUsersList.forEach(u => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
+          <td><b>${escapeHtml(u.username || '未設定')}</b></td>
           <td><small>${u.uid}</small></td>
           <td><b>${escapeHtml(u.email || '未知信箱')}</b></td>
           <td>
@@ -1343,7 +1403,6 @@
     async function handleUpload() {
       if (!currentUser) { openAuthView(); return; }
 
-      const uploaderName = document.getElementById('uploaderName').value.trim();
       const category = document.getElementById('resourceCategory').value;
       const subjectName = document.getElementById('subjectName').value.trim();
       const schoolName = document.getElementById('schoolName').value.trim();
@@ -1384,7 +1443,7 @@
       }
 
       const newResource = {
-        uploader: uploaderName || '匿名',
+        uploader: currentUsername, // 自動套用當前登入的 Username
         uploaderUid: currentUser.uid,
         uploaderEmail: currentUser.email,
         category: category,
@@ -1412,7 +1471,6 @@
           submitBtn.disabled = false;
           submitBtn.innerText = '上傳送審 (需管理員審核)';
           submitBtn.classList.remove('success');
-          document.getElementById('uploaderName').value = '';
           document.getElementById('subjectName').value = '';
           document.getElementById('schoolName').value = '';
           document.getElementById('uploaderRemark').value = '';
