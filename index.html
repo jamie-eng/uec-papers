@@ -5,13 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>統考預試試卷收集站</title>
   
-  <!-- 引入 PDF.js 库，解决 iPhone/iOS 无法顺畅翻页的问题 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
   </script>
 
-  <!-- 引入 Firebase SDK (Auth & App) -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 
@@ -28,6 +26,8 @@
       --primary-btn: #4a3b68;
       --border-color: #e2e2e2;
       --success-btn: #2e7d32;
+      --danger-btn: #d32f2f;
+      --edit-btn: #1976d2;
     }
 
     body.dark-mode {
@@ -58,7 +58,7 @@
 
     .header-left { display: flex; align-items: center; gap: 12px; }
     .header-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
-    .header-right { display: flex; align-items: center; gap: 8px; }
+    .header-right { display: flex; align-items: center; gap: 6px; }
 
     .icon-btn {
       background: none; border: none; cursor: pointer; color: var(--text-color);
@@ -67,6 +67,11 @@
 
     .login-btn {
       background-color: var(--primary-btn); color: white; border: none; padding: 6px 10px;
+      border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;
+    }
+
+    .admin-nav-btn {
+      background-color: #333; color: white; border: none; padding: 6px 8px;
       border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;
     }
 
@@ -96,7 +101,7 @@
 
     .form-group { margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
     .form-group label { font-size: 14px; font-weight: 600; }
-    .form-group input {
+    .form-group input, .form-group select {
       width: 100%; padding: 10px 12px; border: 1px solid var(--border-color);
       background-color: var(--card-bg); color: var(--text-color); border-radius: 8px; font-size: 14px; outline: none;
     }
@@ -106,9 +111,7 @@
     .btn-submit {
       width: 100%; background-color: var(--primary-btn); color: white; border: none;
       padding: 12px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 8px;
-      transition: background-color 0.2s;
     }
-
     .btn-submit.success { background-color: var(--success-btn); }
 
     .table-wrapper { border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); }
@@ -127,7 +130,7 @@
     .or-divider { text-align: center; font-size: 12px; opacity: 0.5; margin: 6px 0; }
     .switch-mode-text { text-align: center; font-size: 12px; margin-top: 10px; color: var(--primary-btn); cursor: pointer; font-weight: bold; }
 
-    /* Modal 查看器 */
+    /* Modals */
     .modal {
       display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%;
       background-color: rgba(0,0,0,0.85); flex-direction: column; align-items: center; justify-content: center; padding: 10px;
@@ -143,6 +146,18 @@
     .modal-body img { max-width: 100%; max-height: 100%; object-fit: contain; }
     .pdf-page-canvas { width: 100% !important; height: auto !important; margin-bottom: 10px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
 
+    /* Admin Modal Specifics */
+    .admin-modal-content {
+      background: var(--card-bg); color: var(--text-color); width: 95%; max-width: 720px; height: 85vh;
+      border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; box-shadow: var(--shadow);
+    }
+    .status-badge { padding: 3px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; display: inline-block; }
+    .status-pending { background: #fff3cd; color: #856404; }
+    .status-approved { background: #d4edda; color: #155724; }
+    .btn-delete { background-color: var(--danger-btn); padding: 5px 8px; font-size: 12px; border-radius: 6px; color: white; border: none; cursor: pointer; }
+    .btn-edit { background-color: var(--edit-btn); padding: 5px 8px; font-size: 12px; border-radius: 6px; color: white; border: none; cursor: pointer; margin-right: 4px; }
+    .btn-approve { background-color: var(--success-btn); padding: 5px 8px; font-size: 12px; border-radius: 6px; color: white; border: none; cursor: pointer; margin-right: 4px; }
+
     svg { stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
   </style>
 </head>
@@ -156,14 +171,14 @@
       <h1 class="header-title">統考預試試卷<br>收集站</h1>
     </div>
     <div class="header-right">
-      <button class="login-btn" id="login-status-btn" onclick="openAuthView()">帳號登入</button>
+      <button class="admin-nav-btn" onclick="openAdminLogin()">管理員</button>
+      <button class="login-btn" id="login-status-btn" onclick="openAuthView()">登入</button>
       <button class="icon-btn" id="theme-toggle">
         <svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="23" y2="12"></line></svg>
       </button>
     </div>
   </header>
 
-  <!-- 主菜單 -->
   <main id="main-menu">
     <div class="card" id="btn-upload">
       <svg class="card-icon" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"></path><line x1="4" y1="21" x2="20" y2="21"></line></svg>
@@ -179,7 +194,6 @@
     </div>
   </main>
 
-  <!-- 帳號認證頁面 (登入/註冊) -->
   <main id="auth-view" class="view-section">
     <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
     <div class="section-title" id="auth-title">🔐 帳號登入</div>
@@ -197,7 +211,6 @@
     </form>
   </main>
 
-  <!-- 上傳頁面 -->
   <main id="upload-view" class="view-section">
     <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
     <div class="section-title">↑ 上傳考卷</div>
@@ -208,7 +221,7 @@
       </div>
       <div class="form-group">
         <label>年份 (Year)</label>
-        <input type="number" id="paperYear" required value="2026" placeholder="例如: 2026, 2025..." />
+        <input type="number" id="paperYear" required value="2026" />
       </div>
       <div class="form-group">
         <label>科目 (Subject)</label>
@@ -222,7 +235,7 @@
       <div class="form-group">
         <label>📁 選擇本地檔案 (PDF / 圖片)</label>
         <input type="file" id="paperFile" accept=".pdf,image/*" />
-        <span class="file-hint">⚠️ 本地文件大小上限：<b>100MB</b></span>
+        <span class="file-hint">⚠️ 檔案大小上限：<b>100MB</b></span>
       </div>
 
       <div class="or-divider">── 或填寫網絡連結 ──</div>
@@ -232,11 +245,10 @@
         <input type="url" id="downloadUrl" placeholder="https://drive.google.com/..." />
       </div>
 
-      <button type="submit" class="btn-submit" id="submit-btn">上傳同步到 Firebase 雲端</button>
+      <button type="submit" class="btn-submit" id="submit-btn">上傳送審 (需管理員審核)</button>
     </form>
   </main>
 
-  <!-- 下載列表頁面 -->
   <main id="download-view" class="view-section">
     <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
     <div class="section-title" id="download-title">↓ 下載考卷</div>
@@ -255,7 +267,7 @@
     </div>
   </main>
 
-  <!-- 全屏查看器 Modal -->
+  <!-- File Viewer Modal -->
   <div id="viewer-modal" class="modal">
     <div class="modal-header">
       <span id="modal-title">考卷預覽</span>
@@ -264,8 +276,42 @@
     <div class="modal-body" id="modal-body"></div>
   </div>
 
+  <!-- Admin Panel Modal -->
+  <div id="admin-modal" class="modal">
+    <div class="admin-modal-content">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2>👑 管理員審核後台</h2>
+        <button class="modal-close" style="color:var(--text-color);" onclick="closeAdminModal()">&times;</button>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; background: #f9f9fb; padding: 10px; border-radius: 8px;">
+        <div>
+          <label style="font-size: 13px; font-weight: bold;">篩選：</label>
+          <select id="adminStatusFilter" onchange="renderAdminTable()" style="padding: 6px; border-radius: 6px;">
+            <option value="pending" selected>待審核 (Pending)</option>
+            <option value="approved">已通過</option>
+            <option value="all">全部</option>
+          </select>
+        </div>
+        <button onclick="fetchAdminPapers()" style="padding: 6px 12px; background:var(--primary-btn); color:white; border:none; border-radius:6px; cursor:pointer;">重新整理</button>
+      </div>
+      <div class="table-wrapper" style="flex-grow: 1;">
+        <table>
+          <thead>
+            <tr>
+              <th>狀態</th>
+              <th>年份/科目</th>
+              <th>學校/上載者</th>
+              <th>連結</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="admin-papers-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <script>
-    // 你的舊專案 Firebase 設定 (uec-papers-4c1a7)
     const firebaseConfig = {
       apiKey: "AIzaSyDGYJiK6BNfl9h6d2eu32oKHjx1rdqXy9U",
       authDomain: "uec-papers-4c1a7.firebaseapp.com",
@@ -277,37 +323,32 @@
       measurementId: "G-323MBR471Y"
     };
 
-    if (!firebase.apps.length) {
-      firebase.initializeApp(firebaseConfig);
-    }
+    if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
 
     const DB_URL = "https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers.json";
-    const MAX_FILE_SIZE_MB = 100;
+    const ADMIN_PASS = "Yitwan6988";
     let currentCategory = '2026';
     let papersData = [];
+    let adminPaperList = [];
     let currentUser = null;
     let isRegisterMode = false;
 
-    // 監聽 Firebase 登入狀態
     firebase.auth().onAuthStateChanged((user) => {
       currentUser = user;
       const loginBtn = document.getElementById('login-status-btn');
       if (user) {
-        loginBtn.innerText = "已登入 (登出)";
-        loginBtn.style.background = "#2e7d32";
+        loginBtn.innerText = "登出";
+        loginBtn.style.background = "#d32f2f";
       } else {
-        loginBtn.innerText = "帳號登入";
+        loginBtn.innerText = "登入";
         loginBtn.style.background = "var(--primary-btn)";
       }
     });
 
-    // 切換登入與註冊介面
     function openAuthView() {
       if (currentUser) {
         if (confirm(`目前已登入：${currentUser.email}\n確定要登出帳號嗎？`)) {
-          firebase.auth().signOut().then(() => {
-            showMenu();
-          });
+          firebase.auth().signOut().then(() => { showMenu(); });
         }
         return;
       }
@@ -334,7 +375,6 @@
       }
     }
 
-    // 處理帳號登入 / 註冊表單送出
     document.getElementById('auth-form').addEventListener('submit', async function(e) {
       e.preventDefault();
       const email = document.getElementById('authEmail').value.trim();
@@ -395,7 +435,6 @@
         }
         return;
       }
-
       mainMenu.style.display = 'none';
       downloadView.style.display = 'block';
       currentCategory = category;
@@ -408,15 +447,12 @@
       listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px;">資料載入中...</td></tr>';
 
       try {
-        const response = await fetch(DB_URL, { method: 'GET', headers: { 'Accept': 'application/json' } });
+        const response = await fetch(DB_URL);
         const data = await response.json();
         
         papersData = [];
         if (data) {
-          papersData = Object.keys(data).map(key => ({
-            id: key,
-            ...data[key]
-          }));
+          papersData = Object.keys(data).map(key => ({ id: key, ...data[key] }));
         }
 
         const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${currentUser.uid}.json`;
@@ -425,25 +461,23 @@
         const uploadedCount = userData.uploadedCount || 0;
 
         const filtered = papersData.filter(p => {
+          if (p.approved !== true) return false;
           const y = parseInt(p.year);
-          return category === '2026' ? y === 2026 : (y <= 2025 || isNaN(y));
+          return currentCategory === '2026' ? y === 2026 : (y <= 2025 || isNaN(y));
         });
 
-        // 1:1 ratio rule (1 upload unlocks 1 file view)
-        const allowedVisibleCount = uploadedCount;
         const banner = document.getElementById('unlock-status-banner');
-        
         if (uploadedCount === 0) {
-          banner.innerHTML = `⚠️ 您目前累計上傳 <b>0</b> 份檔案，可查看 <b>0</b> 份。請至少上傳 1 份解鎖查看權限！`;
-        } else if (allowedVisibleCount >= filtered.length) {
-          banner.innerHTML = `🎉 您已上傳 <b>${uploadedCount}</b> 份檔案，目前已解鎖此分類的<b>全部考卷</b>！`;
+          banner.innerHTML = `⚠️ 您目前獲批上傳 <b>0</b> 份，可查看 <b>0</b> 份。`;
+        } else if (uploadedCount >= filtered.length) {
+          banner.innerHTML = `🎉 您已獲批上傳 <b>${uploadedCount}</b> 份，已解鎖此分類全部考卷！`;
         } else {
-          banner.innerHTML = `📊 您已上傳 <b>${uploadedCount}</b> 份檔案，解鎖可查看 <b>${allowedVisibleCount}</b> 份（總計 ${filtered.length} 份）。多上傳可解鎖更多！`;
+          banner.innerHTML = `📊 您已獲批上傳 <b>${uploadedCount}</b> 份，可查看 <b>${uploadedCount}</b> 份。`;
         }
 
-        renderPapers(filtered, allowedVisibleCount);
+        renderPapers(filtered, uploadedCount);
       } catch (err) {
-        listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px; color:red;">載入失敗，請檢查網絡。</td></tr>';
+        listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px; color:red;">載入失敗</td></tr>';
       }
     }
 
@@ -452,7 +486,7 @@
       listContainer.innerHTML = '';
 
       if (filteredData.length === 0) {
-        listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px;">暫無此分類的考卷數據</td></tr>';
+        listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px;">暫無已審核通過的考卷</td></tr>';
         return;
       }
 
@@ -464,7 +498,7 @@
         tr.innerHTML = `
           <td><span class="year-tag">${escapeHtml(item.year)}</span><b>${escapeHtml(item.subject)}</b></td>
           <td>${escapeHtml(item.school)}<div class="uploader-tag">由 ${escapeHtml(item.uploader)} 上傳</div></td>
-          <td><button class="download-btn" onclick="openViewer('${item.id}')">👁️ 查看 / 下載</button></td>
+          <td><button class="download-btn" onclick="openViewer('${item.id}')">👁️ 查看</button></td>
         `;
         listContainer.appendChild(tr);
       });
@@ -472,216 +506,212 @@
       if (lockedCount > 0) {
         const lockTr = document.createElement('tr');
         lockTr.innerHTML = `
-          <td colspan="3" style="padding: 16px; background: rgba(0,0,0,0.03); font-size: 13px; opacity: 0.7;">
-            🔒 還有 <b>${lockedCount}</b> 份考卷被鎖定。請上傳更多檔案以解鎖更多查看權限！
-            <br><button style="margin-top:6px; padding:4px 10px; background:var(--primary-btn); color:white; border:none; border-radius:4px; cursor:pointer;" onclick="document.getElementById('btn-upload').click()">去上傳檔案</button>
+          <td colspan="3" style="padding: 14px; background: rgba(0,0,0,0.03); font-size: 13px; opacity: 0.7;">
+            🔒 還有 <b>${lockedCount}</b> 份考卷被鎖定。請上傳檔案等管理員審批解鎖！
           </td>
         `;
         listContainer.appendChild(lockTr);
       }
     }
 
-    async function openViewer(id) {
-      const paper = papersData.find(p => p.id === id);
-      if (!paper || !paper.link) {
-        alert("找不到檔案連結！");
+    // Admin Panel Actions
+    function openAdminLogin() {
+      const pass = prompt("請輸入管理員密碼 (Yiyang 後台):");
+      if (pass === ADMIN_PASS) {
+        document.getElementById('admin-modal').style.display = 'flex';
+        fetchAdminPapers();
+      } else if (pass !== null) {
+        alert("密碼錯誤！");
+      }
+    }
+
+    function closeAdminModal() {
+      document.getElementById('admin-modal').style.display = 'none';
+    }
+
+    async function fetchAdminPapers() {
+      const tbody = document.getElementById('admin-papers-list');
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:16px;">載入後台數據中...</td></tr>';
+
+      try {
+        const res = await fetch(DB_URL);
+        const data = await res.json();
+        adminPaperList = [];
+        if (data) {
+          adminPaperList = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+        }
+        renderAdminTable();
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="5" style="padding:16px; color:red;">加載失敗</td></tr>';
+      }
+    }
+
+    function renderAdminTable() {
+      const tbody = document.getElementById('admin-papers-list');
+      const filter = document.getElementById('adminStatusFilter').value;
+      tbody.innerHTML = '';
+
+      const list = adminPaperList.filter(item => {
+        if (filter === 'pending') return item.approved !== true;
+        if (filter === 'approved') return item.approved === true;
+        return true;
+      });
+
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="padding:16px; opacity:0.6;">無相關數據</td></tr>';
         return;
       }
 
+      list.forEach(item => {
+        const tr = document.createElement('tr');
+        const isAppr = item.approved === true;
+        const badge = isAppr ? '<span class="status-badge status-approved">已通過</span>' : '<span class="status-badge status-pending">待審核</span>';
+        const approveBtn = !isAppr ? `<button class="btn-approve" onclick="approvePaper('${item.id}')">批准+1</button>` : '';
+
+        tr.innerHTML = `
+          <td>${badge}</td>
+          <td>[${escapeHtml(item.year)}]<br><b>${escapeHtml(item.subject)}</b></td>
+          <td>${escapeHtml(item.school)}<br><small>${escapeHtml(item.uploader)}</small></td>
+          <td><a href="${escapeHtml(item.link)}" target="_blank" style="color:var(--edit-btn);">預覽</a></td>
+          <td>
+            ${approveBtn}
+            <button class="btn-delete" onclick="deleteAdminPaper('${item.id}')">刪除</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function approvePaper(id) {
+      const paper = adminPaperList.find(p => p.id === id);
+      if (!paper) return;
+
+      if (!confirm(`確定批准這份試卷並為上傳者增加 1 份解鎖額度嗎？`)) return;
+
+      try {
+        await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ approved: true })
+        });
+
+        if (paper.uploaderUid) {
+          const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${paper.uploaderUid}.json`;
+          const uRes = await fetch(userRefUrl);
+          const uData = await uRes.json() || { uploadedCount: 0 };
+          const newCount = (uData.uploadedCount || 0) + 1;
+
+          await fetch(userRefUrl, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uploadedCount: newCount })
+          });
+        }
+
+        alert("審批成功！");
+        fetchAdminPapers();
+      } catch (err) {
+        alert("操作失敗");
+      }
+    }
+
+    async function deleteAdminPaper(id) {
+      if (confirm("確定從雲端刪除此試卷？")) {
+        await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, { method: 'DELETE' });
+        fetchAdminPapers();
+      }
+    }
+
+    async function openViewer(id) {
+      const paper = papersData.find(p => p.id === id);
+      if (!paper || !paper.link) return;
       const modal = document.getElementById('viewer-modal');
       const modalBody = document.getElementById('modal-body');
-      const modalTitle = document.getElementById('modal-title');
-      
-      modalTitle.innerText = `${paper.subject} (${paper.school})`;
-      modalBody.innerHTML = '<div style="color:white; padding:20px;">正在加載檔案页面...</div>';
+      document.getElementById('modal-title').innerText = `${paper.subject} (${paper.school})`;
+      modalBody.innerHTML = '<div style="color:white; padding:20px;">載入中...</div>';
 
       const link = paper.link;
-
       if (link.startsWith('data:image/')) {
-        modalBody.innerHTML = '';
-        const img = document.createElement('img');
-        img.src = link;
-        modalBody.appendChild(img);
+        modalBody.innerHTML = `<img src="${link}">`;
       } else if (link.startsWith('data:application/pdf')) {
         modalBody.innerHTML = '';
-        
-        const topBar = document.createElement('div');
-        topBar.style.cssText = 'padding:8px; width:100%; text-align:center; background:#2a2a2a; border-radius:6px; margin-bottom:10px;';
-        
-        const openBtn = document.createElement('button');
-        openBtn.innerText = '💾 在新標籤頁開啟 / 儲存完整 PDF';
-        openBtn.style.cssText = 'padding:6px 14px; background:#4a3b68; color:white; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:12px;';
-        openBtn.onclick = () => {
-          const blob = base64ToBlob(link);
-          const blobUrl = URL.createObjectURL(blob);
-          window.open(blobUrl, '_blank');
-        };
-        topBar.appendChild(openBtn);
-        modalBody.appendChild(topBar);
-
         try {
           const pdfData = atob(link.split(',')[1]);
-          const loadingTask = pdfjsLib.getDocument({ data: pdfData });
-          const pdf = await loadingTask.promise;
-
-          for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-            const page = await pdf.getPage(pageNum);
-            const viewport = page.getViewport({ scale: 1.5 });
-            
+          const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const vp = page.getViewport({ scale: 1.5 });
             const canvas = document.createElement('canvas');
             canvas.className = 'pdf-page-canvas';
-            const context = canvas.getContext('2d');
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-
+            canvas.height = vp.height;
+            canvas.width = vp.width;
             modalBody.appendChild(canvas);
-
-            await page.render({
-              canvasContext: context,
-              viewport: viewport
-            }).promise;
+            await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
           }
-        } catch (err) {
-          modalBody.innerHTML = '<div style="color:red; padding:20px;">PDF 加載失敗，請嘗試在新標籤頁開啟。</div>';
-          modalBody.appendChild(topBar);
+        } catch(e) {
+          modalBody.innerHTML = '<div style="color:red; padding:20px;">PDF 加載失敗</div>';
         }
       } else {
         window.open(link, '_blank');
         return;
       }
-
       modal.style.display = 'flex';
     }
 
-    function base64ToBlob(base64Data) {
-      const parts = base64Data.split(';base64,');
-      const contentType = parts[0].split(':')[1];
-      const raw = window.atob(parts[1]);
-      const uInt8Array = new Uint8Array(raw.length);
-      for (let i = 0; i < raw.length; ++i) {
-        uInt8Array[i] = raw.charCodeAt(i);
-      }
-      return new Blob([uInt8Array], { type: contentType });
-    }
-
-    function closeViewer() {
-      document.getElementById('viewer-modal').style.display = 'none';
-      document.getElementById('modal-body').innerHTML = '';
-    }
-
-    document.getElementById('paperFile').addEventListener('change', function() {
-      const file = this.files[0];
-      if (file) {
-        const fileSizeMB = file.size / (1024 * 1024);
-        if (fileSizeMB > MAX_FILE_SIZE_MB) {
-          alert(`⚠️ 檔案過大！\n你選擇的檔案大小為 ${fileSizeMB.toFixed(1)}MB，已超過上限 ${MAX_FILE_SIZE_MB}MB。\n請壓縮檔案或使用 Google Drive 連結上傳！`);
-          this.value = '';
-        }
-      }
-    });
+    function closeViewer() { document.getElementById('viewer-modal').style.display = 'none'; }
 
     document.getElementById('upload-form').addEventListener('submit', async function(e) {
       e.preventDefault();
+      if (!currentUser) { openAuthView(); return; }
 
-      if (!currentUser) {
-        alert("請先完成登入才能上傳考卷！");
-        openAuthView();
-        return;
-      }
-
-      const submitBtn = document.getElementById('submit-btn');
       const fileInput = document.getElementById('paperFile');
       const urlInput = document.getElementById('downloadUrl');
+      if (!fileInput.files[0] && !urlInput.value.trim()) { alert("請上傳檔案或填寫連結"); return; }
 
-      if (!fileInput.files[0] && !urlInput.value.trim()) {
-        alert("請選擇本地檔案，或者填寫下載連結！");
-        return;
-      }
-
-      const file = fileInput.files[0];
-      if (file && (file.size / (1024 * 1024)) > MAX_FILE_SIZE_MB) {
-        alert(`檔案超過 ${MAX_FILE_SIZE_MB}MB 限制，無法上傳！`);
-        return;
-      }
-
+      const submitBtn = document.getElementById('submit-btn');
       submitBtn.disabled = true;
-      submitBtn.innerText = '正在上傳並更新解鎖額度...';
+      submitBtn.innerText = '上傳中...';
 
       let fileUrl = urlInput.value.trim();
       if (fileInput.files[0]) {
-        fileUrl = await readFileAsBase64(fileInput.files[0]);
+        fileUrl = await new Promise((res) => {
+          const reader = new FileReader();
+          reader.onload = () => res(reader.result);
+          reader.readAsDataURL(fileInput.files[0]);
+        });
       }
 
       const newPaper = {
         uploader: document.getElementById('uploaderName').value,
+        uploaderUid: currentUser.uid,
         year: document.getElementById('paperYear').value.trim(),
         subject: document.getElementById('subjectName').value,
         school: document.getElementById('schoolName').value,
         link: fileUrl,
+        approved: false,
         createdAt: Date.now()
       };
 
       try {
-        const resPaper = await fetch(DB_URL, {
+        await fetch(DB_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newPaper)
         });
-
-        if (!resPaper.ok) throw new Error('Paper upload failed');
-
-        const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${currentUser.uid}.json`;
-        const userRes = await fetch(userRefUrl);
-        const userData = await userRes.json() || { uploadedCount: 0 };
-
-        const newCount = (userData.uploadedCount || 0) + 1;
-        const todayStr = new Date().toISOString().split('T')[0];
-        const oneDayMs = 24 * 60 * 60 * 1000;
-        
-        const currentApprovedUntil = userData.approvedUntil && userData.approvedUntil > Date.now() ? userData.approvedUntil : Date.now();
-        const newApprovedUntil = currentApprovedUntil + oneDayMs;
-
-        await fetch(userRefUrl, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: currentUser.email,
-            uploadedCount: newCount,
-            approvedUntil: newApprovedUntil,
-            lastUploadDate: todayStr
-          })
-        });
-
-        submitBtn.innerText = '✓ 上傳成功！額度已更新';
+        submitBtn.innerText = '✓ 上傳成功';
         submitBtn.classList.add('success');
-
-        document.getElementById('subjectName').value = '';
-        urlInput.value = '';
-        fileInput.value = '';
-
         setTimeout(() => {
-          submitBtn.innerText = '上傳同步到 Firebase 雲端';
-          submitBtn.classList.remove('success');
           submitBtn.disabled = false;
-          alert(`上傳成功！您目前累計上傳 ${newCount} 份，已解鎖查看 ${newCount} 份檔案的權限！`);
+          submitBtn.innerText = '上傳送審 (需管理員審核)';
+          submitBtn.classList.remove('success');
           showMenu();
         }, 1000);
-
-      } catch (err) {
-        alert('上傳失敗！請檢查網絡連線後重試。');
-        submitBtn.innerText = '上傳同步到 Firebase 雲端';
+      } catch(err) {
+        alert("上傳失敗");
         submitBtn.disabled = false;
+        submitBtn.innerText = '上傳送審 (需管理員審核)';
       }
     });
-
-    function readFileAsBase64(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = error => reject(error);
-        reader.readAsDataURL(file);
-      });
-    }
 
     function escapeHtml(str) {
       return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
