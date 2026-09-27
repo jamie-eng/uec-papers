@@ -10,6 +10,7 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.5/dist/tesseract.min.js"></script>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -163,16 +164,30 @@
       display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%;
       background-color: rgba(0,0,0,0.85); flex-direction: column; align-items: center; justify-content: center; padding: 10px;
     }
+    #viewer-modal { justify-content: flex-start; overflow-y: auto; }
     .modal-header {
-      width: 100%; max-width: 600px; display: flex; justify-content: space-between; align-items: center; color: white; padding: 10px 0;
+      width: 100%; max-width: 600px; display: flex; justify-content: space-between; align-items: center;
+      color: white; padding: 10px 0; position: sticky; top: 0; z-index: 6;
+      background: rgba(10,10,10,0.95); backdrop-filter: blur(4px);
     }
     .modal-close { background: none; border: none; color: white; font-size: 28px; cursor: pointer; }
     .modal-body {
-      width: 100%; max-width: 600px; height: 80vh; background: #1a1a1a; border-radius: 12px; overflow-y: auto;
+      width: 100%; max-width: 600px; background: #1a1a1a; border-radius: 12px;
       display: flex; flex-direction: column; align-items: center; position: relative; padding: 10px;
     }
     .modal-body img { max-width: 100%; max-height: 100%; object-fit: contain; }
     .pdf-page-canvas { width: 100% !important; height: auto !important; margin-bottom: 10px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+
+    .modal-toolbar {
+      width: 100%; max-width: 600px; display: flex; gap: 8px; padding: 8px 0;
+      position: sticky; top: 46px; z-index: 5; background: rgba(10,10,10,0.95);
+    }
+    .modal-tool-btn { flex: 1; background: #333; color: white; border: none; padding: 10px; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; }
+    .modal-tool-btn:active { transform: scale(0.98); }
+    #ocr-box {
+      display: none; width: 100%; max-width: 600px; background: #1a1a1a; border-radius: 12px;
+      margin-bottom: 8px;
+    }
 
     .copyright-modal-content {
       background: var(--card-bg); color: var(--text-color); width: 90%; max-width: 480px;
@@ -361,6 +376,10 @@
       <span id="modal-title">資源預覽</span>
       <button class="modal-close" onclick="closeViewer()">&times;</button>
     </div>
+    <div class="modal-toolbar" id="modal-toolbar">
+      <button class="modal-tool-btn" onclick="runOcr(currentViewerId)">🔤 OCR 轉文字稿</button>
+    </div>
+    <div id="ocr-box"></div>
     <div class="modal-body" id="modal-body"></div>
   </div>
 
@@ -1472,11 +1491,20 @@
       }
     }
 
+    let currentViewerId = null;
+
     async function openViewer(id) {
       const paper = papersData.find(p => p.id === id) || adminPaperList.find(p => p.id === id);
       if (!paper || !paper.link) return;
+      currentViewerId = id;
+
       const modal = document.getElementById('viewer-modal');
       const modalBody = document.getElementById('modal-body');
+      const toolbar = document.getElementById('modal-toolbar');
+      const ocrBox = document.getElementById('ocr-box');
+      ocrBox.style.display = 'none'; ocrBox.innerHTML = '';
+      toolbar.style.display = 'flex';
+
       document.getElementById('modal-title').innerText = `${paper.subject} (${paper.school})`;
       modalBody.innerHTML = '<div style="color:white; padding:20px;">載入中...</div>';
       modal.style.display = 'flex';
@@ -1484,7 +1512,8 @@
       const link = paper.link;
 
       if (link.startsWith('http://') || link.startsWith('https://')) {
-        modalBody.innerHTML = `<div style="color:white; padding:20px; text-align:center;">此為外部雲端連結，若無法直接預覽請點擊下載：<br><br><a href="${link}" target="_blank" style="color:#64b5f6; font-size:16px; text-decoration:underline;">點此開啟雲端預試/筆記連結</a></div>`;
+        toolbar.style.display = 'none';
+        modalBody.innerHTML = `<div style="color:white; padding:20px; text-align:center;">此為外部雲端連結，若無法直接預覽請點擊下載：<br><br><a href="${link}" target="_blank" style="color:#64b5f6; font-size:16px; text-decoration:underline;">點此開啟雲端預試/筆記連結</a><br><br><small style="opacity:0.6;">（雲端連結因跨網域限制，暫不支援 OCR 文字稿）</small></div>`;
         return;
       }
 
@@ -1519,11 +1548,127 @@
           `;
         }
       } else {
+        toolbar.style.display = 'none';
         modalBody.innerHTML = `<div style="color:white; padding:20px;">無法辨識的檔案格式</div>`;
       }
     }
 
-    function closeViewer() { document.getElementById('viewer-modal').style.display = 'none'; }
+    function closeViewer() {
+      document.getElementById('viewer-modal').style.display = 'none';
+      currentViewerId = null;
+    }
+
+    // 把資源轉成一組圖片（給 OCR 用）：圖片直接回傳；PDF 逐頁轉成 canvas 圖片；
+    // 雲端連結因跨網域限制不支援
+    async function getPaperPageImages(paper) {
+      const link = paper.link;
+      if (link.startsWith('data:image/')) {
+        return [link];
+      }
+      if (link.startsWith('data:application/pdf') || link.includes('pdf')) {
+        let base64Data = link;
+        if (link.includes(',')) base64Data = link.split(',')[1];
+        const pdfData = atob(base64Data);
+        const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+        const images = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const vp = page.getViewport({ scale: 2 });
+          const canvas = document.createElement('canvas');
+          canvas.width = vp.width;
+          canvas.height = vp.height;
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+          images.push(canvas.toDataURL('image/png'));
+        }
+        return images;
+      }
+      return [];
+    }
+
+    // 對指定資源執行 OCR（結果會快取回 Firebase，之後同一份資源不用重新辨識）
+    async function runOcr(id) {
+      if (!id) return;
+      const paper = papersData.find(p => p.id === id) || adminPaperList.find(p => p.id === id);
+      if (!paper) return;
+
+      const ocrBox = document.getElementById('ocr-box');
+
+      if (paper.ocrText) {
+        showOcrResult(paper.ocrText);
+        return;
+      }
+
+      if (!paper.link || paper.link.startsWith('http')) {
+        alert("⚠️ 雲端連結（例如 Google Drive）因跨網域限制，無法在瀏覽器端執行 OCR，僅支援直接上傳到本站的 PDF/圖片。");
+        return;
+      }
+
+      ocrBox.style.display = 'block';
+      ocrBox.innerHTML = '<div style="color:white; padding:10px;">OCR 辨識中，請稍候...</div>';
+
+      try {
+        const images = await getPaperPageImages(paper);
+        if (images.length > 10) {
+          ocrBox.innerHTML = `<div style="color:white; padding:10px;">頁數較多（共 ${images.length} 頁），OCR 可能需要幾分鐘，請耐心等候，不要關閉視窗...</div>`;
+        }
+
+        let fullText = '';
+        for (let i = 0; i < images.length; i++) {
+          const { data: { text } } = await Tesseract.recognize(images[i], 'chi_tra+eng', {
+            logger: m => {
+              if (m.status === 'recognizing text') {
+                const pct = Math.round(m.progress * 100);
+                ocrBox.innerHTML = `<div style="color:white; padding:10px;">OCR 辨識中：第 ${i + 1}/${images.length} 頁 (${pct}%)...</div>`;
+              }
+            }
+          });
+          fullText += (images.length > 1 ? `\n\n── 第 ${i + 1} 頁 ──\n` : '') + text.trim();
+        }
+        fullText = fullText.trim();
+
+        // 快取到 Firebase，之後同一份資源不用再重新 OCR
+        await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ocrText: fullText })
+        });
+        paper.ocrText = fullText;
+
+        showOcrResult(fullText);
+      } catch (e) {
+        ocrBox.innerHTML = `<div style="color:#ff8a80; padding:10px;">OCR 失敗：${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function showOcrResult(text) {
+      const ocrBox = document.getElementById('ocr-box');
+      ocrBox.style.display = 'block';
+      if (!text) {
+        ocrBox.innerHTML = '<div style="color:white; padding:10px;">⚠️ OCR 未辨識出任何文字（可能是檔案畫質太低或內容非文字）。</div>';
+        return;
+      }
+      ocrBox.innerHTML = `
+        <div style="color:white; padding:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <b>📝 OCR 文字稿（可複製抄寫）</b>
+            <button onclick="copyOcrText()" style="background:#1976d2;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer; font-size:12px;">複製全部</button>
+          </div>
+          <textarea id="ocr-text-area" readonly style="width:100%; min-height:200px; background:#222; color:white; border:1px solid #555; border-radius:6px; padding:8px; font-size:13px;">${escapeHtml(text)}</textarea>
+        </div>
+      `;
+    }
+
+    function copyOcrText() {
+      const ta = document.getElementById('ocr-text-area');
+      ta.select();
+      ta.setSelectionRange(0, 999999);
+      try {
+        document.execCommand('copy');
+        alert('已複製到剪貼簿！');
+      } catch (e) {
+        alert('複製失敗，請手動長按選取文字複製。');
+      }
+    }
 
     function downloadResource(id) {
       const paper = (papersData.find(p => p.id === id)) || (adminPaperList.find(p => p.id === id));
