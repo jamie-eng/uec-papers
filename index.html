@@ -1304,38 +1304,39 @@
       }
     }
 
+    // 強化版：1:1 隨機解鎖函數（保證一定能成功派發）
     async function approvePaper(id) {
       const paper = adminPaperList.find(p => p.id === id);
       if (!paper) return;
 
       try {
+        // 1. 先把該上傳審核通過
         await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ approved: true, adminMsg: "審核通過 (1:1 隨機解鎖)！" })
         });
 
+        // 2. 如果該資源有上傳者的 UID，為他隨機解鎖一份資源
         if (paper.uploaderUid) {
           const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${paper.uploaderUid}.json`;
           const uRes = await fetch(userRefUrl);
-          const userData = await uRes.json() || { unlockedIds: [] };
+          let userData = await uRes.json();
+          if (!userData) userData = { unlockedIds: [] };
           let unlockedIds = userData.unlockedIds || [];
 
+          // 抓取全站所有已批准的資源
           const allRes = await fetch(DB_URL);
           const allData = await allRes.json() || {};
           
-          const available = Object.keys(allData).map(k => ({ id: k, ...allData[k] })).filter(p => {
-            if (p.approved !== true) return false;
-            if (p.uploaderUid === paper.uploaderUid) return false;
-            if (unlockedIds.includes(p.id)) return false;
-            return p.category === paper.category;
-          });
+          let allApproved = Object.keys(allData).map(k => ({ id: k, ...allData[k] })).filter(p => p.approved === true);
 
-          const targetPool = available.length > 0 ? available : Object.keys(allData).map(k => ({ id: k, ...allData[k] })).filter(p => p.approved === true && p.uploaderUid !== paper.uploaderUid && !unlockedIds.includes(p.id));
+          // 排除自己上傳的以及已經解鎖過的
+          let available = allApproved.filter(p => p.uploaderUid !== paper.uploaderUid && !unlockedIds.includes(p.id));
 
-          if (targetPool.length > 0) {
-            const rand = Math.floor(Math.random() * targetPool.length);
-            const selected = targetPool[rand];
+          if (available.length > 0) {
+            const rand = Math.floor(Math.random() * available.length);
+            const selected = available[rand];
             unlockedIds.push(selected.id);
 
             await fetch(userRefUrl, {
@@ -1343,10 +1344,12 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ unlockedIds: unlockedIds })
             });
-            alert(`審批成功！已為上傳者隨機解鎖 1 份同級資源 (${selected.subject})`);
+            alert(`✓ 審批成功！已為上傳者隨機解鎖資源：【${selected.subject}】`);
           } else {
-            alert("審批成功！目前尚無其他同級資源可供解鎖。");
+            alert("✓ 審批成功！但目前全站沒有其他可供解鎖的新資源。");
           }
+        } else {
+          alert("✓ 審批成功！(此上傳項目無綁定 uploaderUid，故無法自動隨機解鎖)");
         }
 
         paper.approved = true;
@@ -1391,8 +1394,9 @@
 
         if (paper.uploaderUid) {
           const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${paper.uploaderUid}.json`;
-          const uRes = await fetch(userRefUrl);
-          const userData = await uRes.json() || { unlockedIds: [] };
+          let uRes = await fetch(userRefUrl);
+          let userData = await uRes.json();
+          if (!userData) userData = { unlockedIds: [] };
           let unlockedIds = userData.unlockedIds || [];
 
           if (!unlockedIds.includes(selectedTarget.id)) {
