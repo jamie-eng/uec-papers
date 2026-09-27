@@ -428,13 +428,14 @@
           return category === '2026' ? y === 2026 : (y <= 2025 || isNaN(y));
         });
 
-        const allowedVisibleCount = uploadedCount * 2;
+        // 1:1 ratio: 1 upload unlocks 1 file view
+        const allowedVisibleCount = uploadedCount;
         const banner = document.getElementById('unlock-status-banner');
         
         if (uploadedCount === 0) {
           banner.innerHTML = `⚠️ 您目前累計上傳 <b>0</b> 份檔案，可查看 <b>0</b> 份。請至少上傳 1 份解鎖查看權限！`;
         } else if (allowedVisibleCount >= filtered.length) {
-          banner.innerHTML = `🎉 您已上傳 <b>${uploadedCount}</b> 份檔案（解鎖額度：${allowedVisibleCount} 份），目前已解鎖此分類的<b>全部考卷</b>！`;
+          banner.innerHTML = `🎉 您已上傳 <b>${uploadedCount}</b> 份檔案，目前已解鎖此分類的<b>全部考卷</b>！`;
         } else {
           banner.innerHTML = `📊 您已上傳 <b>${uploadedCount}</b> 份檔案，解鎖可查看 <b>${allowedVisibleCount}</b> 份（總計 ${filtered.length} 份）。多上傳可解鎖更多！`;
         }
@@ -471,7 +472,7 @@
         const lockTr = document.createElement('tr');
         lockTr.innerHTML = `
           <td colspan="3" style="padding: 16px; background: rgba(0,0,0,0.03); font-size: 13px; opacity: 0.7;">
-            🔒 還有 <b>${lockedCount}</b> 份考卷被鎖定。請上傳更多檔案以解鎖雙倍查看權限！
+            🔒 還有 <b>${lockedCount}</b> 份考卷被鎖定。請上傳更多檔案以解鎖更多查看權限！
             <br><button style="margin-top:6px; padding:4px 10px; background:var(--primary-btn); color:white; border:none; border-radius:4px; cursor:pointer;" onclick="document.getElementById('btn-upload').click()">去上傳檔案</button>
           </td>
         `;
@@ -650,7 +651,7 @@
           })
         });
 
-        submitBtn.innerText = '✓ 上傳成功！額度已加倍';
+        submitBtn.innerText = '✓ 上傳成功！額度已更新';
         submitBtn.classList.add('success');
 
         document.getElementById('subjectName').value = '';
@@ -661,7 +662,7 @@
           submitBtn.innerText = '上傳同步到 Firebase 雲端';
           submitBtn.classList.remove('success');
           submitBtn.disabled = false;
-          alert(`上傳成功！您目前累計上傳 ${newCount} 份，已解鎖查看 ${newCount * 2} 份檔案的權限！`);
+          alert(`上傳成功！您目前累計上傳 ${newCount} 份，已解鎖查看 ${newCount} 份檔案的權限！`);
           showMenu();
         }, 1000);
 
