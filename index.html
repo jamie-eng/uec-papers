@@ -295,7 +295,7 @@
       
       <div class="form-group">
         <label>📝 備註 / 指定解鎖要求 (選填)</label>
-        <textarea id="uploaderRemark" rows="2" placeholder="例如：希望解鎖 2026 數學卷（若留空則由系統自動隨機解鎖同級資源）"></textarea>
+        <textarea id="uploaderRemark" rows="2" placeholder="例如：希望解鎖 Main Page 裡的 2026 數學卷"></textarea>
       </div>
 
       <div class="form-group">
@@ -1112,6 +1112,7 @@
         const isAppr = item.approved === true;
         const badge = isAppr ? '<span class="status-badge status-approved">已通過</span>' : '<span class="status-badge status-pending">待審核</span>';
         const approveBtn = !isAppr ? `<button class="btn-approve" onclick="approvePaper('${item.id}')">批准並1:1解鎖</button>` : '';
+        const customUnlockBtn = !isAppr ? `<button class="btn-approve" style="background:#0288d1; margin-top:2px;" onclick="approveWithSpecificPaper('${item.id}')">🎯 指定解鎖Main Page資源</button>` : '';
 
         let fileActionHtml = '';
         if (item.link) {
@@ -1125,7 +1126,7 @@
         }
 
         const gmailInfo = item.uploaderEmail ? `<br><small style="color:#666;">Gmail: ${escapeHtml(item.uploaderEmail)}</small>` : '';
-        const remarkHtml = item.remark ? `<br><small style="color:#d97706;">備註：${escapeHtml(item.remark)}</small>` : '';
+        const remarkHtml = item.remark ? `<br><small style="color:#d97706; font-weight:bold;">備註要求：${escapeHtml(item.remark)}</small>` : '';
         const msgHtml = item.adminMsg ? `<br><small style="color:#2e7d32;">回覆：${escapeHtml(item.adminMsg)}</small>` : '';
 
         tr.innerHTML = `
@@ -1136,6 +1137,7 @@
           <td>
             <div class="action-btns">
               ${approveBtn}
+              ${customUnlockBtn}
               <button class="btn-edit" onclick="editAdminPaper('${item.id}')">編輯</button>
               <button class="btn-edit" style="background:#8e24aa;" onclick="changePaperUploader('${item.id}', '${escapeHtml(item.uploader)}')">改名字</button>
               <button class="btn-delete" onclick="deleteAdminPaper('${item.id}')">刪除</button>
@@ -1212,7 +1214,6 @@
       });
     }
 
-    // 管理員修改已上傳檔案的作者名字 (Username)
     async function changePaperUploader(id, currentUploader) {
       const newUploader = prompt(`請輸入正確的上傳者 Username (原為: ${currentUploader})：`, currentUploader);
       if (newUploader === null || !newUploader.trim()) return;
@@ -1355,6 +1356,66 @@
       }
     }
 
+    // 新增：根據用戶備註要求，從 Main Page 的現有資源中指定解鎖給該上傳者
+    async function approveWithSpecificPaper(pendingId) {
+      const paper = adminPaperList.find(p => p.id === pendingId);
+      if (!paper) return;
+
+      // 篩選出 Main Page 中所有已批准且不是自己上傳的資源供管理員選擇
+      const approvedPapers = adminPaperList.filter(p => p.approved === true && p.id !== pendingId);
+      if (approvedPapers.length === 0) {
+        alert("目前 Main Page 中尚無其他已批准的資源可供指定解鎖！");
+        return;
+      }
+
+      let promptMsg = `請選擇要指定解鎖給【${paper.uploader}】的 Main Page 資源編號：\n\n`;
+      approvedPapers.forEach((p, idx) => {
+        promptMsg += `[${idx + 1}] ${p.subject} (${p.school})\n`;
+      });
+
+      const choice = prompt(promptMsg, "1");
+      if (choice === null) return;
+
+      const index = parseInt(choice) - 1;
+      if (isNaN(index) || index < 0 || index >= approvedPapers.length) {
+        alert("選擇無效！");
+        return;
+      }
+
+      const selectedTarget = approvedPapers[index];
+
+      try {
+        // 1. 批准該上傳項目
+        await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${pendingId}.json`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ approved: true, adminMsg: `審核通過！已按您的備註指定解鎖：${selectedTarget.subject}` })
+        });
+
+        // 2. 將指定的 Main Page 資源 ID 加入該上傳者的 unlockedIds 裡面
+        if (paper.uploaderUid) {
+          const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${paper.uploaderUid}.json`;
+          const uRes = await fetch(userRefUrl);
+          const userData = await uRes.json() || { unlockedIds: [] };
+          let unlockedIds = userData.unlockedIds || [];
+
+          if (!unlockedIds.includes(selectedTarget.id)) {
+            unlockedIds.push(selectedTarget.id);
+            await fetch(userRefUrl, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ unlockedIds: unlockedIds })
+            });
+          }
+          alert(`成功！已批准該上傳，並精準解鎖 Main Page 的「${selectedTarget.subject}」給用戶 ${paper.uploader}！`);
+        }
+
+        fetchAdminData();
+      } catch (err) {
+        alert("指定解鎖失敗：" + err.message);
+      }
+    }
+
     async function deleteAdminPaper(id) {
       if (confirm("確定永久刪除此資源？")) {
         await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, { method: 'DELETE' });
@@ -1458,7 +1519,7 @@
       }
 
       const newResource = {
-        uploader: currentUsername, // 自動套用當前登入的 Username
+        uploader: currentUsername,
         uploaderUid: currentUser.uid,
         uploaderEmail: currentUser.email,
         category: category,
