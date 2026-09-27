@@ -481,7 +481,7 @@
         const banner = document.getElementById('unlock-status-banner');
         const unlockedCount = unlockedIds.length;
         if (unlockedCount === 0) {
-          banner.innerHTML = `⚠️ 您目前已解鎖 <b>0</b> 份考卷。請上傳並等待審批解鎖！`;
+          banner.innerHTML = `⚠️ 您目前已解鎖 <b>0</b> 份考卷。請等待其他用戶上傳以自動解鎖！`;
         } else {
           banner.innerHTML = `📊 您目前已解鎖 <b>${unlockedCount}</b> 份考卷。`;
         }
@@ -505,7 +505,7 @@
       const lockedCount = Math.max(0, filteredData.length - visiblePapers.length);
 
       if (visiblePapers.length === 0) {
-        listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px; opacity:0.7;">尚無解鎖的考卷，請上傳試卷等待管理員審核解鎖！</td></tr>';
+        listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px; opacity:0.7;">尚無解鎖的考卷（不顯示自己上傳的卷）。等其他用戶上傳新卷通過後，將自動為您隨機解鎖！</td></tr>';
         return;
       }
 
@@ -524,7 +524,7 @@
         const lockTr = document.createElement('tr');
         lockTr.innerHTML = `
           <td colspan="3" style="padding: 14px; background: rgba(0,0,0,0.03); font-size: 13px; opacity: 0.7;">
-            🔒 還有 <b>${lockedCount}</b> 份考卷被鎖定。再上傳並通過審核即可隨機解鎖新考卷！
+            🔒 還有 <b>${lockedCount}</b> 份考卷被鎖定。等其他用戶上傳新卷後將自動解鎖！
           </td>
         `;
         listContainer.appendChild(lockTr);
@@ -659,11 +659,11 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             approved: true,
-            adminMsg: "已審核通過！" 
+            adminMsg: "已審核通過並為您隨機解鎖新考卷！" 
           })
         });
 
-        // 2. 處理上傳者的隨機解鎖（不分配自己、欠著等下次別人放再自動 update）
+        // 2. 嚴格執行：絕不解鎖自己的卷，只隨機挑選其他人的卷（若無則欠著，等下次別人放再自動 update）
         if (paper.uploaderUid) {
           const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${paper.uploaderUid}.json`;
           const uRes = await fetch(userRefUrl);
@@ -674,11 +674,11 @@
           const allPapersRes = await fetch(DB_URL);
           const allPapersData = await allPapersRes.json() || {};
           
-          // 過濾出：1. 已批准 2. 不是自己上傳的 3. 還沒被該用戶解鎖過的
+          // 過濾：1.已批准 2.絕對不是自己上傳的 3.還沒解鎖過的
           const availablePapers = Object.keys(allPapersData).map(k => ({ id: k, ...allPapersData[k] })).filter(p => {
             if (p.approved !== true) return false;
-            if (p.uploaderUid === paper.uploaderUid) return false; // 嚴格排除自己上傳的卷
-            if (unlockedIds.includes(p.id)) return false; // 排除已經解鎖過的
+            if (p.uploaderUid === paper.uploaderUid) return false; // 嚴格排除自己
+            if (unlockedIds.includes(p.id)) return false; // 排除已解鎖過
             return true;
           });
 
@@ -688,24 +688,15 @@
             const selectedPaper = availablePapers[randomIndex];
             unlockedIds.push(selectedPaper.id);
 
-            // 更新用戶的解鎖清單
             await fetch(userRefUrl, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ unlockedIds: unlockedIds })
             });
-            alert(`審批成功！已為上傳者隨機解鎖其他人的考卷：${selectedPaper.subject} (${selectedPaper.school})`);
+            alert(`審批成功！已為上傳者隨機解鎖其他用戶的考卷：${selectedPaper.subject} (${selectedPaper.school})`);
           } else {
-            // 如果暫時沒有別人的卷可解鎖，把自己的這份加進去（欠著，等下次別人放新卷時解鎖）
-            if (!unlockedIds.includes(id)) {
-              unlockedIds.push(id);
-              await fetch(userRefUrl, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ unlockedIds: unlockedIds })
-              });
-            }
-            alert("審批成功！目前尚無其他人的考卷可供隨機解鎖（先解鎖您自己的）。等下次有其他人上傳新卷通過後，系統將自動為您解鎖新卷！");
+            // 沒有其他人的卷可解鎖，保持不變（欠著，等未來有新人上傳時自動 update 補上）
+            alert("審批成功！目前尚無其他人的考卷可供隨機解鎖（已保留額度）。等下次有其他用戶上傳新卷並通過審核後，系統將自動為您隨機解鎖新卷！");
           }
         }
 
