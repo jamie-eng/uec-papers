@@ -518,7 +518,7 @@
 
     // Admin Panel Actions
     function openAdminLogin() {
-      const pass = prompt("請輸入管理員密碼 (Yiyang 後台):");
+      const pass = prompt("請輸入管理員密碼:");
       if (pass === ADMIN_PASS) {
         document.getElementById('admin-modal').style.display = 'flex';
         fetchAdminPapers();
