@@ -198,6 +198,24 @@
 </head>
 <body>
 
+  <!-- 檢視器 Modal 範例 -->
+<div id="viewerModal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <div class="modal-header">
+      <span id="viewerTitle">檔案預覽</span>
+      <div>
+        <!-- 這裡加入下載按鈕 -->
+        <a id="modalDownloadBtn" href="#" download class="btn-download-header" style="margin-right: 10px; text-decoration: none;">📥 下載檔案</a>
+        <span onclick="closeViewer()" style="cursor:pointer; font-size: 20px;">&times;</span>
+      </div>
+    </div>
+    <div class="modal-body" id="viewerBody">
+      <!-- 內容 / PDF 預覽 -->
+    </div>
+  </div>
+</div>
+
+
   <header>
     <div class="header-left">
       <button class="icon-btn">
