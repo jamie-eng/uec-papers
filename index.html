@@ -200,39 +200,39 @@
   <main id="auth-view" class="view-section">
     <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
     <div class="section-title" id="auth-title">🔐 帳號登入</div>
-    <form id="auth-form">
+    <div id="auth-form">
       <div class="form-group">
         <label>電子郵件 (Gmail)</label>
-        <input type="email" id="authEmail" required placeholder="example@gmail.com" />
+        <input type="email" id="authEmail" placeholder="example@gmail.com" />
       </div>
       <div class="form-group">
         <label>密碼 (Password)</label>
-        <input type="password" id="authPassword" required placeholder="至少 6 位密碼" />
+        <input type="password" id="authPassword" placeholder="至少 6 位密碼" />
       </div>
-      <button type="submit" class="btn-submit" id="auth-submit-btn">立即登入</button>
+      <button type="button" class="btn-submit" id="auth-submit-btn" onclick="handleAuth()">立即登入</button>
       <div class="switch-mode-text" id="switch-auth-mode" onclick="toggleAuthMode()">還沒有帳號？點此免費註冊</div>
-    </form>
+    </div>
   </main>
 
   <main id="upload-view" class="view-section">
     <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
     <div class="section-title">↑ 上傳考卷</div>
-    <form id="upload-form">
+    <div id="upload-form">
       <div class="form-group">
         <label>上載者姓名 (Name)</label>
-        <input type="text" id="uploaderName" required placeholder="例如: 小明" />
+        <input type="text" id="uploaderName" placeholder="例如: 小明" />
       </div>
       <div class="form-group">
         <label>年份 (Year)</label>
-        <input type="number" id="paperYear" required value="2026" />
+        <input type="number" id="paperYear" value="2026" />
       </div>
       <div class="form-group">
         <label>科目 (Subject)</label>
-        <input type="text" id="subjectName" required placeholder="例如: 華文試卷 1" />
+        <input type="text" id="subjectName" placeholder="例如: 華文試卷 1" />
       </div>
       <div class="form-group">
         <label>學校 (School)</label>
-        <input type="text" id="schoolName" required placeholder="例如: 巴生興華中學" />
+        <input type="text" id="schoolName" placeholder="例如: 巴生興華中學" />
       </div>
       
       <div class="form-group">
@@ -253,8 +253,8 @@
         <input type="url" id="downloadUrl" placeholder="https://drive.google.com/..." />
       </div>
 
-      <button type="submit" class="btn-submit" id="submit-btn">上傳送審 (需管理員審核)</button>
-    </form>
+      <button type="button" class="btn-submit" id="submit-btn" onclick="handleUpload()">上傳送審 (需管理員審核)</button>
+    </div>
   </main>
 
   <main id="download-view" class="view-section">
@@ -383,11 +383,15 @@
       }
     }
 
-    document.getElementById('auth-form').addEventListener('submit', async function(e) {
-      e.preventDefault();
+    async function handleAuth() {
       const email = document.getElementById('authEmail').value.trim();
       const password = document.getElementById('authPassword').value;
       const submitBtn = document.getElementById('auth-submit-btn');
+
+      if (!email || !password) {
+        alert("請填寫電子郵件與密碼！");
+        return;
+      }
 
       submitBtn.disabled = true;
       submitBtn.innerText = '處理中...';
@@ -409,7 +413,7 @@
         submitBtn.disabled = false;
         submitBtn.innerText = isRegisterMode ? "確認註冊" : "立即登入";
       }
-    });
+    }
 
     document.getElementById('theme-toggle').onclick = () => document.body.classList.toggle('dark-mode');
     const mainMenu = document.getElementById('main-menu');
@@ -648,7 +652,6 @@
       if (adminMsg === null) return;
 
       try {
-        // 1. 更新試卷狀態為已批准
         const res = await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -660,7 +663,6 @@
 
         if (!res.ok) throw new Error("Approval failed");
 
-        // 2. 為上傳者增加解鎖額度
         if (paper.uploaderUid) {
           const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${paper.uploaderUid}.json`;
           const uRes = await fetch(userRefUrl);
@@ -675,7 +677,6 @@
         }
 
         alert("審批成功！");
-        // 本地立即更新狀態，畫面直接刷新
         paper.approved = true;
         paper.adminMsg = adminMsg.trim();
         renderAdminTable();
@@ -729,13 +730,26 @@
 
     function closeViewer() { document.getElementById('viewer-modal').style.display = 'none'; }
 
-    document.getElementById('upload-form').addEventListener('submit', async function(e) {
-      e.preventDefault();
+    async function handleUpload() {
       if (!currentUser) { openAuthView(); return; }
 
+      const uploaderName = document.getElementById('uploaderName').value.trim();
+      const paperYear = document.getElementById('paperYear').value.trim();
+      const subjectName = document.getElementById('subjectName').value.trim();
+      const schoolName = document.getElementById('schoolName').value.trim();
+      const uploaderRemark = document.getElementById('uploaderRemark').value.trim();
       const fileInput = document.getElementById('paperFile');
       const urlInput = document.getElementById('downloadUrl');
-      if (!fileInput.files[0] && !urlInput.value.trim()) { alert("請上傳檔案或填寫連結"); return; }
+
+      if (!subjectName || !schoolName) {
+        alert("請完整填寫科目與學校名稱！");
+        return;
+      }
+
+      if (!fileInput.files[0] && !urlInput.value.trim()) {
+        alert("請選擇本地檔案或填寫下載連結！");
+        return;
+      }
 
       const submitBtn = document.getElementById('submit-btn');
       submitBtn.disabled = true;
@@ -751,12 +765,12 @@
       }
 
       const newPaper = {
-        uploader: document.getElementById('uploaderName').value.trim(),
+        uploader: uploaderName || '匿名',
         uploaderUid: currentUser.uid,
-        year: document.getElementById('paperYear').value.trim(),
-        subject: document.getElementById('subjectName').value.trim(),
-        school: document.getElementById('schoolName').value.trim(),
-        remark: document.getElementById('uploaderRemark').value.trim(),
+        year: paperYear || '2026',
+        subject: subjectName,
+        school: schoolName,
+        remark: uploaderRemark,
         link: fileUrl,
         approved: false,
         createdAt: Date.now()
@@ -774,15 +788,21 @@
           submitBtn.disabled = false;
           submitBtn.innerText = '上傳送審 (需管理員審核)';
           submitBtn.classList.remove('success');
-          document.getElementById('upload-form').reset();
+          // 清空欄位
+          document.getElementById('uploaderName').value = '';
+          document.getElementById('subjectName').value = '';
+          document.getElementById('schoolName').value = '';
+          document.getElementById('uploaderRemark').value = '';
+          document.getElementById('paperFile').value = '';
+          document.getElementById('downloadUrl').value = '';
           showMenu();
         }, 1000);
       } catch(err) {
-        alert("上傳失敗");
+        alert("上傳失敗：" + err.message);
         submitBtn.disabled = false;
         submitBtn.innerText = '上傳送審 (需管理員審核)';
       }
-    });
+    }
 
     function escapeHtml(str) {
       return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
