@@ -88,13 +88,13 @@
     .marquee-item { margin-right: 40px; display: inline-flex; align-items: center; gap: 6px; }
     @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 
-    /* 公開 Top 3 排行榜區塊 */
+    /* 公開 Top 1-10 排行榜區塊 (僅顯示名字) */
     .public-leaderboard {
       background: var(--card-bg); border-radius: 16px; padding: 16px; box-shadow: var(--shadow);
       border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 8px;
     }
     .public-leaderboard-title { font-size: 14px; font-weight: 700; color: var(--header-text); display: flex; align-items: center; gap: 6px; }
-    .public-top3-items { font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+    .public-top10-items { font-size: 13px; display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
 
     .card {
       background-color: var(--card-bg); border-radius: 16px; box-shadow: var(--shadow);
@@ -222,10 +222,10 @@
   </div>
 
   <main id="main-menu">
-    <!-- 公開 Top 3 排行榜 (大家只看到名字) -->
+    <!-- 公開 Top 1-10 排行榜 (僅顯示名字與排名) -->
     <div class="public-leaderboard">
-      <div class="public-leaderboard-title">🏆 每月 Top 3 貢獻排行榜（每月1號定期送筆記獎勵）</div>
-      <div class="public-top3-items" id="public-top3-list">載入中...</div>
+      <div class="public-leaderboard-title">🏆 貢獻英雄榜 (Top 1 - 10) —— 每月 1 號自動派發筆記獎勵</div>
+      <div class="public-top10-items" id="public-top10-list">載入中...</div>
     </div>
 
     <div class="card" id="btn-upload">
@@ -305,7 +305,7 @@
       <div class="form-group">
         <label>📁 選擇本地檔案 (PDF / 圖片)</label>
         <input type="file" id="paperFile" accept=".pdf,image/*" />
-        <span class="file-hint">⚠️ 內建智能壓縮：系統將自動優化檔案。若檔案過大，請改填下方雲端連結以防預覽失效。</span>
+        <span class="file-hint">⚠️ 內建智能處理：若檔案過大，請改填下方雲端連結以防預覽失效。</span>
       </div>
 
       <div class="or-divider">── 或填寫網絡連結 ──</div>
@@ -341,7 +341,6 @@
     </div>
   </main>
 
-  <!-- 意見反饋與寫信求檔專區 -->
   <main id="feedback-view" class="view-section">
     <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
     <div class="section-title">✉️ 意見反饋與寫信求檔箱</div>
@@ -378,7 +377,7 @@
         <p>歡迎使用本站。為維護良好的學術分享與筆記交流環境，請嚴格遵守：</p>
         <p><b>1. 版權歸屬：</b>所有上傳之試卷與筆記版權歸屬原作者或學校，僅供學術交流與複習備考使用。</p>
         <p><b>2. 違規處置（Delete）：</b>嚴禁惡意上傳無關內容、色情暴力、廣告或侵權檔案，違者管理員將<b>直接刪除並永久封鎖該 Gmail 登入權限</b>。</p>
-        <p><b>3. 獎勵提醒：</b>積極上傳優質筆記與考卷（1:1 制度），<b>每個月1號定期選出 Top 3 貢獻者贈送筆記獎勵！</b></p>
+        <p><b>3. 獎勵提醒：</b>積極上傳優質筆記與考卷（1:1 制度），<b>每個月 1 號系統將自動挑選 Top 3 英雄榜（含同分並列）派發筆記獎勵！</b></p>
       </div>
       <button type="button" class="btn-submit" onclick="closeCopyrightModal()">我已完全了解並同意</button>
     </div>
@@ -387,13 +386,13 @@
   <div id="admin-modal" class="modal">
     <div class="admin-modal-content">
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h2>👑 管理員審核、私信、封鎖與 Top 3 後台</h2>
+        <h2>👑 管理員審核、私信、封鎖與自動派獎後台</h2>
         <button class="modal-close" style="color:var(--text-color);" onclick="closeAdminModal()">&times;</button>
       </div>
 
       <div class="leaderboard-box" style="background: var(--header-purple); color: var(--header-text); padding: 12px; border-radius: 8px;">
-        <div class="leaderboard-title">🏆 Top 3 貢獻排行榜（管理員詳細版）</div>
-        <div id="admin-top3-list" style="font-size: 12px; line-height: 1.4;">載入中...</div>
+        <div class="leaderboard-title">🏆 Top 1-10 貢獻排行榜（管理員檢視區）</div>
+        <div id="admin-top10-list" style="font-size: 12px; line-height: 1.4;">載入中...</div>
       </div>
 
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; background: #f9f9fb; padding: 10px; border-radius: 8px;">
@@ -402,7 +401,7 @@
           <select id="adminPanelTab" onchange="switchAdminTab()" style="padding: 6px; border-radius: 6px;">
             <option value="papers" selected>資源審核管理</option>
             <option value="feedbacks">寫信留言與求檔需求</option>
-            <option value="users">用戶名單、私信與封鎖管理</option>
+            <option value="users">用戶名單 (UID/Gmail)、私信與封鎖</option>
           </select>
         </div>
         <div id="paper-filter-container">
@@ -449,6 +448,7 @@
     const DB_URL = "https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers.json";
     const FEEDBACK_DB_URL = "https://uec-papers-4c1a7-default-rtdb.firebaseio.com/feedbacks.json";
     const BANNED_DB_URL = "https://uec-papers-4c1a7-default-rtdb.firebaseio.com/bannedUsers.json";
+    const SYSTEM_STATE_URL = "https://uec-papers-4c1a7-default-rtdb.firebaseio.com/systemState.json";
     const ADMIN_PASS = "Yitwan6988";
     
     let currentCategoryMode = 'uec';
@@ -459,7 +459,6 @@
     let currentUser = null;
     let isRegisterMode = false;
 
-    // 內建 AQ Security Filter (AI 內容過濾器)
     const forbiddenWords = ["粗口", "admin123", "hack", "spam", "敏感詞1", "色情"];
     function aiContentFilter(text) {
       if (!text) return false;
@@ -470,16 +469,106 @@
       return false;
     }
 
-    window.onload = () => {
+    window.onload = async () => {
       document.getElementById('copyright-modal').style.display = 'flex';
       fetchMarqueeRequests();
       fetchPublicLeaderboard();
+      await checkAndAutoRewardTop3();
     };
+
+    // 每月 1 號自動派獎邏輯 (若無上傳則不亂抽；支援並列第三名同分一起給)
+    async function checkAndAutoRewardTop3() {
+      try {
+        const now = new Date();
+        const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`; // e.g. "2026-9"
+        
+        // 檢查本月是否已派獎過
+        const stateRes = await fetch(SYSTEM_STATE_URL);
+        const stateData = await stateRes.json() || {};
+        if (stateData.lastRewardMonth === currentMonthKey) return; // 本月已派過
+
+        // 僅在每個月 1 號或之後自動觸發檢查
+        if (now.getDate() !== 1) return;
+
+        const res = await fetch(DB_URL);
+        const data = await res.json();
+        if (!data) return;
+        const pList = Object.values(data);
+
+        // 統計每個 uploaderUid 的上傳數與對應名稱
+        const userStats = {};
+        pList.forEach(p => {
+          if (p.approved === true && p.uploaderUid && p.uploader) {
+            if (!userStats[p.uploaderUid]) {
+              userStats[p.uploaderUid] = { name: p.uploader, count: 0 };
+            }
+            userStats[p.uploaderUid].count++;
+          }
+        });
+
+        const sortedUsers = Object.keys(userStats).map(uid => ({
+          uid,
+          name: userStats[uid].name,
+          count: userStats[uid].count
+        })).sort((a, b) => b.count - a.count);
+
+        if (sortedUsers.length === 0) return; // 沒人上傳過則不派獎
+
+        // 找出 Top 3 (支援同分並列，例如第三名有兩個人分數相同，則兩人都拿獎)
+        let rewardList = [];
+        let distinctRanks = 0;
+        let lastCount = -1;
+
+        for (let u of sortedUsers) {
+          if (u.count !== lastCount) {
+            distinctRanks++;
+            lastCount = u.count;
+          }
+          if (distinctRanks <= 3) {
+            rewardList.push(u);
+          } else {
+            break;
+          }
+        }
+
+        // 取得所有「學霸筆記」類別的 ID 作為獎勵池
+        const notePapers = pList.filter(p => p.approved === true && p.category === 'notes');
+        if (notePapers.length === 0) return; // 網站上沒有筆記可送就不執行
+        const rewardNoteId = notePapers[0].id; // 預設送第一份精選筆記
+
+        // 依序為得獎者發放獎勵
+        for (let winner of rewardList) {
+          const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${winner.uid}.json`;
+          const uRes = await fetch(userRefUrl);
+          const uData = await uRes.json() || { unlockedIds: [] };
+          let unlockedIds = uData.unlockedIds || [];
+
+          if (!unlockedIds.includes(rewardNoteId)) {
+            unlockedIds.push(rewardNoteId);
+            await fetch(userRefUrl, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ unlockedIds: unlockedIds })
+            });
+          }
+        }
+
+        // 記錄本月已派獎完成
+        await fetch(SYSTEM_STATE_URL, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lastRewardMonth: currentMonthKey })
+        });
+
+        console.log("Monthly Top 3 automated reward distributed successfully!");
+      } catch (e) {
+        console.error("Auto reward error:", e);
+      }
+    }
 
     function openCopyrightModal() { document.getElementById('copyright-modal').style.display = 'flex'; }
     function closeCopyrightModal() { document.getElementById('copyright-modal').style.display = 'none'; }
 
-    // 檢查該用戶是否被管理員列入黑名單 (踢人後無法登入)
     async function checkIsBanned(email) {
       if (!email) return false;
       try {
@@ -647,7 +736,7 @@
       let titleText = '↓ 資源下載區';
       if (mode === 'uec') titleText = '↓ 統考預試專區 (2026/2025/歷年)';
       if (mode === 'junior') titleText = '↓ 初中部專區 (初一/初二/初三 + 練習)';
-      if (mode === 'notes') titleText = '↓ 學霸筆記專區 (Top 3 獎勵領取)';
+      if (mode === 'notes') titleText = '↓ 學霸筆記專區 (Top 1-10 獎勵領取)';
       document.getElementById('download-title').innerText = titleText;
       
       document.getElementById('searchInput').value = '';
@@ -686,7 +775,7 @@
         });
 
         const banner = document.getElementById('unlock-status-banner');
-        banner.innerHTML = `📊 您目前已解鎖 <b>${unlockedIds.length}</b> 份資源 (1:1 制度)。每月1號定期統計 Top 3 獎勵！`;
+        banner.innerHTML = `📊 您目前已解鎖 <b>${unlockedIds.length}</b> 份資源 (1:1 制度)。每月 1 號英雄榜自動派獎！`;
 
         renderFilteredPapers(filtered, unlockedIds);
       } catch (err) {
@@ -749,14 +838,14 @@
       return map[cat] || '一般';
     }
 
-    // 取得公開的 Top 3 貢獻排行榜（大家只看到名字）
+    // 取得公開的 Top 1-10 排行榜（大家只看到名字與排名，不顯示數目）
     async function fetchPublicLeaderboard() {
       try {
         const res = await fetch(DB_URL);
         const data = await res.json();
-        const top3Box = document.getElementById('public-top3-list');
+        const top10Box = document.getElementById('public-top10-list');
         if (!data) {
-          top3Box.innerHTML = '目前尚無上傳紀錄';
+          top10Box.innerHTML = '目前尚無上傳紀錄';
           return;
         }
         const pList = Object.values(data);
@@ -771,16 +860,17 @@
                              .sort((a, b) => b.count - a.count);
 
         if (sorted.length === 0) {
-          top3Box.innerHTML = '尚無通過審核的上傳紀錄';
+          top10Box.innerHTML = '尚無通過審核的上傳紀錄';
           return;
         }
 
         let html = '';
-        sorted.slice(0, 3).forEach((item, index) => {
+        sorted.slice(0, 10).forEach((item, index) => {
           const medals = ['🥇', '🥈', '🥉'];
-          html += `<div>${medals[index] || '🔹'} <b>${escapeHtml(item.name)}</b> （上傳 ${item.count} 份）</div>`;
+          const rankPrefix = medals[index] || `<b>#${index + 1}</b>`;
+          html += `<div>${rankPrefix} <b>${escapeHtml(item.name)}</b></div>`;
         });
-        top3Box.innerHTML = html;
+        top10Box.innerHTML = html;
       } catch(e) {
         console.error(e);
       }
@@ -915,14 +1005,14 @@
           adminUsersList = Object.keys(uData).map(key => ({ uid: key, ...uData[key] }));
         }
 
-        computeAdminTop3Leaderboard();
+        computeAdminTop10Leaderboard();
         switchAdminTab();
       } catch (err) {
         alert("載入後台數據失敗");
       }
     }
 
-    function computeAdminTop3Leaderboard() {
+    function computeAdminTop10Leaderboard() {
       const uploaderCounts = {};
       adminPaperList.forEach(p => {
         if (p.approved === true && p.uploader) {
@@ -933,18 +1023,19 @@
       const sorted = Object.keys(uploaderCounts).map(name => ({ name, count: uploaderCounts[name] }))
                            .sort((a, b) => b.count - a.count);
 
-      const top3Box = document.getElementById('admin-top3-list');
+      const top10Box = document.getElementById('admin-top10-list');
       if (sorted.length === 0) {
-        top3Box.innerHTML = '目前尚無通過審核的上傳紀錄';
+        top10Box.innerHTML = '目前尚無通過審核的上傳紀錄';
         return;
       }
 
       let html = '';
-      sorted.slice(0, 3).forEach((item, index) => {
+      sorted.slice(0, 10).forEach((item, index) => {
         const medals = ['🥇', '🥈', '🥉'];
-        html += `<div>${medals[index] || '🔹'} <b>${escapeHtml(item.name)}</b> — 通過 ${item.count} 份資源（每月1號定期送筆記獎勵）</div>`;
+        const rankPrefix = medals[index] || `#${index + 1}`;
+        html += `<div>${rankPrefix} <b>${escapeHtml(item.name)}</b> — 通過 ${item.count} 份資源</div>`;
       });
-      top3Box.innerHTML = html;
+      top10Box.innerHTML = html;
     }
 
     function renderAdminTable() {
@@ -1075,7 +1166,6 @@
       });
     }
 
-    // 管理員寫信給指定 UID 的用戶
     async function sendAdminMessageToUser(uid, email) {
       const msg = prompt(`請輸入要發送給用戶 (${email || uid}) 的私信內容：`);
       if (!msg) return;
@@ -1289,7 +1379,7 @@
 
       const submitBtn = document.getElementById('submit-btn');
       submitBtn.disabled = true;
-      submitBtn.innerText = '智慧壓縮與上傳中...';
+      submitBtn.innerText = '智慧上傳處理中...';
 
       let fileUrl = urlInput.value.trim();
       if (fileInput.files[0]) {
