@@ -1304,20 +1304,17 @@
       }
     }
 
-    // 強化版：1:1 隨機解鎖函數（保證一定能成功派發）
     async function approvePaper(id) {
       const paper = adminPaperList.find(p => p.id === id);
       if (!paper) return;
 
       try {
-        // 1. 先把該上傳審核通過
         await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ approved: true, adminMsg: "審核通過 (1:1 隨機解鎖)！" })
         });
 
-        // 2. 如果該資源有上傳者的 UID，為他隨機解鎖一份資源
         if (paper.uploaderUid) {
           const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${paper.uploaderUid}.json`;
           const uRes = await fetch(userRefUrl);
@@ -1325,13 +1322,1573 @@
           if (!userData) userData = { unlockedIds: [] };
           let unlockedIds = userData.unlockedIds || [];
 
-          // 抓取全站所有已批准的資源
           const allRes = await fetch(DB_URL);
           const allData = await allRes.json() || {};
           
           let allApproved = Object.keys(allData).map(k => ({ id: k, ...allData[k] })).filter(p => p.approved === true);
+          let available = allApproved.filter(p => p.uploaderUid !== paper.uploaderUid && !unlockedIds.includes(p.id));
 
-          // 排除自己上傳的以及已經解鎖過的
+          if (available.length > 0) {
+            const rand = Math.floor(Math.random() * available.length);
+            const selected = available[rand];
+            unlockedIds.push(selected.id);
+
+            await fetch(userRefUrl, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ unlockedIds: unlockedIds })
+            });
+            alert(`✓ 審批成功！已為上傳者隨機解鎖資源：【${selected.subject}】`);
+          } else {
+            alert("✓ 審批成功！但目前全站沒有其他可供解鎖的新資源。");
+          }
+        } else {
+          alert("✓ 審批成功！(此上傳項目無綁定 uploaderUid，故無法自動隨機解鎖)");
+        }
+
+        paper.approved = true;
+        renderAdminTable();
+      } catch (err) {
+        alert("操作失敗：" + err.message);
+      }
+    }
+
+    async function approveWithSpecificPaper(pendingId) {
+      const paper = adminPaperList.find(p => p.id === pendingId);
+      if (!paper) return;
+
+      const approvedPapers = adminPaperList.filter(p => p.approved === true && p.id !== pendingId);
+      if (approvedPapers.length === 0) {
+        alert("目前 Main Page 中尚無其他已批准的資源可供 1:1 指定解鎖！");
+        return;
+      }
+
+      let promptMsg = `請選擇要 1:1 指定解鎖給【${paper.uploader}】的 Main Page 資源編號：\n\n`;
+      approvedPapers.forEach((p, idx) => {
+        promptMsg += `[${idx + 1}] ${p.subject} (${p.school})\n`;
+      });
+
+      const choice = prompt(promptMsg, "1");
+      if (choice === null) return;
+
+      const index = parseInt(choice) - 1;
+      if (isNaN(index) || index < 0 || index >= approvedPapers.length) {
+        alert("選擇無效！");
+        return;
+      }
+
+      const selectedTarget = approvedPapers[index];
+
+      try {
+        await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${pendingId}.json`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ approved: true, adminMsg: `審核通過！已按您的 1:1 備註指定解鎖：${selectedTarget.subject}` })
+        });
+
+        if (paper.uploaderUid) {
+          const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${paper.uploaderUid}.json`;
+          let uRes = await fetch(userRefUrl);
+          let userData = await uRes.json();
+          if (!userData) userData = { unlockedIds: [] };
+          let unlockedIds = userData.unlockedIds || [];
+
+          if (!unlockedIds.includes(selectedTarget.id)) {
+            unlockedIds.push(selectedTarget.id);
+            await fetch(userRefUrl, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ unlockedIds: unlockedIds })
+            });
+          }
+          alert(`成功！已批准該上傳，並 1:1 精準解鎖 Main Page 的「${selectedTarget.subject}」給用戶 ${paper.uploader}！`);
+        }
+
+        fetchAdminData();
+      } catch (err) {
+        alert("指定解鎖失敗：" + err.message);
+      }
+    }
+
+    async function deleteAdminPaper(id) {
+      if (confirm("確定永久刪除此資源？")) {
+        await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, { method: 'DELETE' });
+        fetchAdminData();
+      }
+    }
+
+    async function openViewer(id) {
+      const paper = papersData.find(p => p.id === id) || adminPaperList.find(p => p.id === id);
+      if (!paper || !paper.link) return;
+      const modal = document.getElementById('viewer-modal');
+      const modalBody = document.getElementById('modal-body');
+      document.getElementById('modal-title').innerText = `${paper.subject} (${paper.school})`;
+      modalBody.innerHTML = '<div style="color:white; padding:20px;">載入中...</div>';
+      modal.style.display = 'flex';
+
+      const link = paper.link;
+
+      if (link.startsWith('http://') || link.startsWith('https://')) {
+        modalBody.innerHTML = `<div style="color:white; padding:20px; text-align:center;">此為外部雲端連結，若無法直接預覽請點擊下載：<br><br><a href="${link}" target="_blank" style="color:#64b5f6; font-size:16px; text-decoration:underline;">點此開啟雲端預試/筆記連結</a></div>`;
+        return;
+      }
+
+      if (link.startsWith('data:image/')) {
+        modalBody.innerHTML = `<img src="${link}">`;
+        return;
+      }
+
+      if (link.startsWith('data:application/pdf') || link.includes('pdf')) {
+        modalBody.innerHTML = '';
+        try {
+          let base64Data = link;
+          if (link.includes(',')) { base64Data = link.split(',')[1]; }
+          const pdfData = atob(base64Data);
+          const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const vp = page.getViewport({ scale: 1.5 });
+            const canvas = document.createElement('canvas');
+            canvas.className = 'pdf-page-canvas';
+            canvas.height = vp.height;
+            canvas.width = vp.width;
+            modalBody.appendChild(canvas);
+            await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+          }
+        } catch(e) {
+          modalBody.innerHTML = `
+            <div style="color:white; padding:30px; text-align:center;">
+              <p>無法在線預覽此 PDF 檔案（檔案過大或格式壓縮限制）</p><br>
+              <a href="${link}" download="resource.pdf" style="background:#1976d2; color:white; padding:10px 20px; border-radius:6px; text-decoration:none; font-weight:bold;">點此下載檔案查看</a>
+            </div>
+          `;
+        }
+      } else {
+        modalBody.innerHTML = `<div style="color:white; padding:20px;">無法辨識的檔案格式</div>`;
+      }
+    }
+
+    function closeViewer() { document.getElementById('viewer-modal').style.display = 'none'; }
+
+    async function handleUpload() {
+      if (!currentUser) { openAuthView(); return; }
+
+      const category = document.getElementById('resourceCategory').value;
+      const subjectName = document.getElementById('subjectName').value.trim();
+      const schoolName = document.getElementById('schoolName').value.trim();
+      const uploaderRemark = document.getElementById('uploaderRemark').value.trim();
+      const fileInput = document.getElementById('paperFile');
+      const urlInput = document.getElementById('downloadUrl');
+
+      if (!subjectName || !schoolName) {
+        alert("請完整填寫科目與學校/來源名稱！");
+        return;
+      }
+
+      if (!fileInput.files[0] && !urlInput.value.trim()) {
+        alert("請選擇本地檔案或填寫雲端下載連結！");
+        return;
+      }
+
+      if (aiContentFilter(subjectName) || aiContentFilter(uploaderRemark)) {
+        alert("⚠️ 偵測到違規字眼，內容已被 AI 安全過濾器攔截！");
+        return;
+      }
+
+      const submitBtn = document.getElementById('submit-btn');
+      submitBtn.disabled = true;
+      submitBtn.innerText = '智慧上傳處理中...';
+
+      let fileUrl = urlInput.value.trim();
+      if (fileInput.files[0]) {
+        const file = fileInput.files[0];
+        if (file.size > 8 * 1024 * 1024) {
+          alert("檔案大於 8MB！建議您上傳至 Google Drive 後貼上連結，以確保預覽順暢。");
+        }
+        fileUrl = await new Promise((res) => {
+          const reader = new FileReader();
+          reader.onload = () => res(reader.result);
+          reader.readAsDataURL(file);
+        });
+      }
+
+      const newResource = {
+        uploader: currentUsername,
+        uploaderUid: currentUser.uid,
+        uploaderEmail: currentUser.email,
+        category: category,
+        year: category.includes('20') ? category : '2026',
+        subject: subjectName,
+        school: schoolName,
+        remark: uploaderRemark,
+        link: fileUrl,
+        approved: false,
+        createdAt: Date.now()
+      };
+
+      try {
+        const response = await fetch(DB_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newResource)
+        });
+
+        if (!response.ok) throw new Error("伺服器拒絕接收");
+
+        submitBtn.innerText = '✓ 上傳成功';
+        submitBtn.classList.add('success');
+        setTimeout(() => {
+          submitBtn.disabled = false;
+          submitBtn.innerText = '上傳送審 (需管理員審核)';
+          submitBtn.classList.remove('success');
+          document.getElementById('subjectName').value = '';
+          document.getElementById('schoolName').value = '';
+          document.getElementById('uploaderRemark').value = '';
+          document.getElementById('paperFile').value = '';
+          document.getElementById('downloadUrl').value = '';
+          showMenu();
+        }, 1000);
+      } catch(err) {
+        alert("上傳失敗，若檔案過大請改用雲端硬碟連結：" + err.message);
+        submitBtn.disabled = false;
+        submitBtn.innerText = '上傳送審 (需管理員審核)';
+      }
+    }
+
+    function escapeHtml(str) {
+      return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+  </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>統考預試與筆記收集站</title>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+  </script>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+
+  <style>
+    :root {
+      --bg-color: #f2f3f5;
+      --card-bg: #ffffff;
+      --text-color: #111111;
+      --shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+      --header-purple: #f0ebf8;
+      --header-text: #4a3b68;
+      --row-even: #ffffff;
+      --row-odd: #fffdf5;
+      --primary-btn: #4a3b68;
+      --border-color: #e2e2e2;
+      --success-btn: #2e7d32;
+      --danger-btn: #d32f2f;
+      --edit-btn: #1976d2;
+    }
+
+    body.dark-mode {
+      --bg-color: #121212;
+      --card-bg: #1e1e1e;
+      --text-color: #f0f0f0;
+      --shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      --header-purple: #2d243a;
+      --header-text: #d8cbeb;
+      --row-even: #1e1e1e;
+      --row-odd: #26241e;
+      --border-color: #333333;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+    body {
+      background-color: var(--bg-color); color: var(--text-color);
+      display: flex; flex-direction: column; align-items: center;
+      min-height: 100vh; padding-bottom: 40px; transition: background-color 0.3s, color 0.3s;
+    }
+
+    header {
+      width: 100%; max-width: 480px; padding: 16px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; background-color: var(--bg-color); z-index: 10;
+    }
+
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .header-title { font-size: 18px; font-weight: 700; line-height: 1.2; }
+    .header-right { display: flex; align-items: center; gap: 6px; }
+
+    .icon-btn {
+      background: none; border: none; cursor: pointer; color: var(--text-color);
+      display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 50%;
+    }
+
+    .login-btn {
+      background-color: var(--primary-btn); color: white; border: none; padding: 6px 10px;
+      border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;
+    }
+
+    .admin-nav-btn {
+      background-color: #333; color: white; border: none; padding: 6px 8px;
+      border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;
+    }
+
+    main { width: 100%; max-width: 480px; padding: 12px 20px; display: flex; flex-direction: column; gap: 14px; }
+
+    .marquee-container {
+      width: 100%; max-width: 480px; padding: 0 20px; margin-bottom: 4px;
+      overflow: hidden; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 8px;
+      display: none; align-items: center; height: 36px; color: #856404; font-size: 13px; font-weight: bold;
+    }
+    body.dark-mode .marquee-container { background: #332701; border-color: #665002; color: #ffda6a; }
+    .marquee-track { display: flex; white-space: nowrap; animation: marquee 15s linear infinite; }
+    .marquee-item { margin-right: 40px; display: inline-flex; align-items: center; gap: 6px; }
+    @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+
+    .public-leaderboard {
+      background: var(--card-bg); border-radius: 16px; padding: 16px; box-shadow: var(--shadow);
+      border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 8px;
+    }
+    .public-leaderboard-title { font-size: 14px; font-weight: 700; color: var(--header-text); display: flex; align-items: center; gap: 6px; }
+    .public-top10-items { font-size: 13px; display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
+
+    .card {
+      background-color: var(--card-bg); border-radius: 16px; box-shadow: var(--shadow);
+      padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      cursor: pointer; transition: transform 0.2s;
+    }
+    .card:active { transform: scale(0.98); }
+    .card-icon { width: 32px; height: 32px; margin-bottom: 8px; }
+    .card-title { font-size: 16px; font-weight: 700; text-align: center; }
+
+    .view-section {
+      display: none; background-color: var(--card-bg); border-radius: 16px;
+      padding: 20px; box-shadow: var(--shadow); margin-top: 10px;
+    }
+
+    .back-btn {
+      background: none; border: none; color: var(--text-color); font-size: 14px;
+      font-weight: 600; cursor: pointer; margin-bottom: 16px; display: inline-flex; align-items: center; gap: 4px;
+    }
+
+    .section-title { font-size: 18px; font-weight: 700; margin-bottom: 14px; text-align: center; }
+
+    .search-bar {
+      width: 100%; padding: 10px 14px; border: 1px solid var(--border-color);
+      background-color: var(--card-bg); color: var(--text-color); border-radius: 8px; font-size: 14px; margin-bottom: 12px; outline: none;
+    }
+
+    .form-group { margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .form-group label { font-size: 14px; font-weight: 600; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%; padding: 10px 12px; border: 1px solid var(--border-color);
+      background-color: var(--card-bg); color: var(--text-color); border-radius: 8px; font-size: 14px; outline: none;
+    }
+
+    .file-hint { font-size: 11px; color: #d97706; margin-top: -2px; font-weight: bold; }
+
+    .btn-submit {
+      width: 100%; background-color: var(--primary-btn); color: white; border: none;
+      padding: 12px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 8px;
+    }
+    .btn-submit.success { background-color: var(--success-btn); }
+
+    .table-wrapper { border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); margin-top: 8px; }
+    table { width: 100%; border-collapse: collapse; text-align: center; font-size: 13px; }
+    th { background-color: var(--header-purple); color: var(--header-text); padding: 12px 6px; font-weight: 700; border-bottom: 1px solid var(--border-color); }
+    td { padding: 10px 6px; vertical-align: middle; border-bottom: 1px solid var(--border-color); font-weight: 600; line-height: 1.3; }
+    tr:nth-child(even) td { background-color: var(--row-even); }
+    tr:nth-child(odd) td { background-color: var(--row-odd); }
+    
+    .year-tag { font-size: 10px; background: #e0e0e0; color: #333; padding: 2px 5px; border-radius: 4px; margin-right: 4px; display: inline-block; }
+    body.dark-mode .year-tag { background: #444; color: #fff; }
+    
+    .uploader-tag { font-size: 11px; opacity: 0.7; font-weight: normal; margin-top: 4px; }
+    .download-btn { cursor: pointer; border: none; color: var(--header-text); font-size: 13px; font-weight: bold; background: var(--header-purple); padding: 6px 12px; border-radius: 6px; display: inline-block; }
+
+    .or-divider { text-align: center; font-size: 12px; opacity: 0.5; margin: 6px 0; }
+    .switch-mode-text { text-align: center; font-size: 12px; margin-top: 10px; color: var(--primary-btn); cursor: pointer; font-weight: bold; }
+
+    .site-footer {
+      margin-top: 24px; text-align: center; font-size: 12px; opacity: 0.7;
+      display: flex; flex-direction: column; gap: 4px; width: 100%; max-width: 480px; padding: 0 20px;
+    }
+    .footer-link { color: var(--primary-btn); cursor: pointer; text-decoration: underline; font-weight: bold; }
+    body.dark-mode .footer-link { color: #d8cbeb; }
+
+    .modal {
+      display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%;
+      background-color: rgba(0,0,0,0.85); flex-direction: column; align-items: center; justify-content: center; padding: 10px;
+    }
+    .modal-header {
+      width: 100%; max-width: 600px; display: flex; justify-content: space-between; align-items: center; color: white; padding: 10px 0;
+    }
+    .modal-close { background: none; border: none; color: white; font-size: 28px; cursor: pointer; }
+    .modal-body {
+      width: 100%; max-width: 600px; height: 80vh; background: #1a1a1a; border-radius: 12px; overflow-y: auto;
+      display: flex; flex-direction: column; align-items: center; position: relative; padding: 10px;
+    }
+    .modal-body img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .pdf-page-canvas { width: 100% !important; height: auto !important; margin-bottom: 10px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+
+    .copyright-modal-content {
+      background: var(--card-bg); color: var(--text-color); width: 90%; max-width: 480px;
+      border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: var(--shadow);
+      text-align: left; max-height: 85vh; overflow-y: auto;
+    }
+
+    .admin-modal-content {
+      background: var(--card-bg); color: var(--text-color); width: 95%; max-width: 860px; height: 88vh;
+      border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; box-shadow: var(--shadow);
+    }
+    .status-badge { padding: 3px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; display: inline-block; }
+    .status-pending { background: #fff3cd; color: #856404; }
+    .status-approved { background: #d4edda; color: #155724; }
+    
+    .action-btns { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; align-items: center; }
+    .btn-delete { background-color: var(--danger-btn); padding: 5px 7px; font-size: 11px; border-radius: 6px; color: white; border: none; cursor: pointer; }
+    .btn-edit { background-color: var(--edit-btn); padding: 5px 7px; font-size: 11px; border-radius: 6px; color: white; border: none; cursor: pointer; }
+    .btn-approve { background-color: var(--success-btn); padding: 5px 7px; font-size: 11px; border-radius: 6px; color: white; border: none; cursor: pointer; }
+    .btn-view-admin { background-color: var(--header-purple); color: var(--header-text); padding: 5px 7px; font-size: 11px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; }
+
+    svg { stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-left">
+      <button class="icon-btn">
+        <svg width="24" height="24" viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+      </button>
+      <h1 class="header-title">統考預試與筆記收集站</h1>
+    </div>
+    <div class="header-right">
+      <button class="admin-nav-btn" onclick="openAdminLogin()">管理員</button>
+      <button class="login-btn" id="login-status-btn" onclick="openAuthView()">登入</button>
+      <button class="icon-btn" id="theme-toggle">
+        <svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="23" y2="12"></line></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="marquee-container" id="marquee-box">
+    <div class="marquee-track" id="marquee-content"></div>
+  </div>
+
+  <main id="main-menu">
+    <div class="public-leaderboard">
+      <div class="public-leaderboard-title">🏆 貢獻英雄榜 (Top 1 - 10) —— 每月 1 號自動派發筆記獎勵</div>
+      <div class="public-top10-items" id="public-top10-list">載入中...</div>
+    </div>
+
+    <div class="card" id="btn-upload">
+      <svg class="card-icon" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"></path><line x1="4" y1="21" x2="20" y2="21"></line></svg>
+      <div class="card-title">上傳考卷或筆記 (1:1 解鎖制度)</div>
+    </div>
+    <div class="card" id="btn-download-uec">
+      <svg class="card-icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"></path><line x1="4" y1="21" x2="20" y2="21"></line></svg>
+      <div class="card-title">統考預試專區 (2026 / 2025 / 歷年)</div>
+    </div>
+    <div class="card" id="btn-download-junior">
+      <svg class="card-icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"></path><line x1="4" y1="21" x2="20" y2="21"></line></svg>
+      <div class="card-title">初中部專區 (初一 / 初二 / 初三 + 練習)</div>
+    </div>
+    <div class="card" id="btn-notes-section">
+      <svg class="card-icon" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path></svg>
+      <div class="card-title">精選學霸筆記專區</div>
+    </div>
+    <div class="card" id="btn-feedback">
+      <svg class="card-icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+      <div class="card-title">意見反饋與寫信求檔箱</div>
+    </div>
+  </main>
+
+  <main id="auth-view" class="view-section">
+    <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
+    <div class="section-title" id="auth-title">🔐 帳號登入</div>
+    <div id="auth-form">
+      <div class="form-group" id="reg-username-group" style="display: none;">
+        <label>用戶名 (Username)</label>
+        <input type="text" id="authUsername" placeholder="例如: SchoolStar" />
+      </div>
+      <div class="form-group">
+        <label>電子郵件 (Gmail)</label>
+        <input type="email" id="authEmail" placeholder="example@gmail.com" />
+      </div>
+      <div class="form-group">
+        <label>密碼 (Password)</label>
+        <input type="password" id="authPassword" placeholder="至少 6 位密碼" />
+      </div>
+      <button type="button" class="btn-submit" id="auth-submit-btn" onclick="handleAuth()">立即登入</button>
+      <div class="switch-mode-text" id="switch-auth-mode" onclick="toggleAuthMode()">還沒有帳號？點此免費註冊</div>
+    </div>
+  </main>
+
+  <main id="upload-view" class="view-section">
+    <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
+    <div class="section-title">↑ 上傳考卷或筆記</div>
+    <div id="upload-form">
+      <div class="form-group">
+        <label>分類級別 (Category)</label>
+        <select id="resourceCategory">
+          <option value="2026">統考預試 - 2026年</option>
+          <option value="2025">統考預試 - 2025年</option>
+          <option value="old">統考預試 - 2024及更早</option>
+          <option value="junior1">初中部 - 初一 (Junior 1)</option>
+          <option value="junior2">初中部 - 初二 (Junior 2)</option>
+          <option value="junior3">初中部 - 初三 (Junior 3)</option>
+          <option value="exercise">綜合練習題庫 (Exercises)</option>
+          <option value="notes">學霸筆記 (Study Notes)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>科目名稱 (Subject)</label>
+        <input type="text" id="subjectName" placeholder="例如: 華文試卷1 / 地理筆記" />
+      </div>
+      <div class="form-group">
+        <label>學校 / 來源 (School/Source)</label>
+        <input type="text" id="schoolName" placeholder="例如: 巴生興華中學 / 自製筆記" />
+      </div>
+      
+      <div class="form-group">
+        <label>📝 備註 / 指定解鎖要求 (選填)</label>
+        <textarea id="uploaderRemark" rows="2" placeholder="例如：希望解鎖 Main Page 裡的 2026 數學卷"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>📁 選擇本地檔案 (PDF / 圖片)</label>
+        <input type="file" id="paperFile" accept=".pdf,image/*" />
+        <span class="file-hint">⚠️ 內建智能處理：若檔案過大，請改填下方雲端連結以防預覽失效。</span>
+      </div>
+
+      <div class="or-divider">── 或填寫網絡連結 ──</div>
+
+      <div class="form-group">
+        <label>下載/預覽連結 (Google Drive / 雲端)</label>
+        <input type="url" id="downloadUrl" placeholder="https://drive.google.com/..." />
+      </div>
+
+      <button type="button" class="btn-submit" id="submit-btn" onclick="handleUpload()">上傳送審 (需管理員審核)</button>
+    </div>
+  </main>
+
+  <main id="download-view" class="view-section">
+    <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
+    <div class="section-title" id="download-title">↓ 資源下載區</div>
+    
+    <input type="text" class="search-bar" id="searchInput" placeholder="🔍 AI 智慧搜尋：輸入科目, 學校或關鍵字（例如：地理、興華）..." oninput="filterPapersList()" />
+
+    <div style="font-size: 12px; opacity: 0.8; text-align: center; margin-bottom: 12px;" id="unlock-status-banner"></div>
+    
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>分類/科目</th>
+            <th>學校/來源</th>
+            <th>檢視/下載</th>
+          </tr>
+        </thead>
+        <tbody id="papers-list"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <main id="feedback-view" class="view-section">
+    <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
+    <div class="section-title">✉️ 意見反饋與寫信求檔箱</div>
+    <div id="feedback-form">
+      <div class="form-group">
+        <label>寫信內容 / 想求的筆記或試卷需求</label>
+        <textarea id="feedbackContent" rows="4" placeholder="請在此寫信或留言，例如：「求筆記：初二地理總複習...」"></textarea>
+      </div>
+      <button type="button" class="btn-submit" id="feedback-submit-btn" onclick="handleFeedbackSubmit()">送出信件與需求</button>
+    </div>
+  </main>
+
+  <div class="site-footer">
+    <span>統考預試與筆記收集站 &copy; 2026</span>
+    <span class="footer-link" onclick="openCopyrightModal()">📄 版權聲明與使用條款 (Copyright Notice)</span>
+  </div>
+
+  <div id="viewer-modal" class="modal">
+    <div class="modal-header">
+      <span id="modal-title">資源預覽</span>
+      <button class="modal-close" onclick="closeViewer()">&times;</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+
+  <div id="copyright-modal" class="modal" style="display:flex;">
+    <div class="copyright-modal-content">
+      <h3 style="color: var(--primary-btn);">⚠️ 版權聲明與使用須知 (Copyright Notice)</h3>
+      <div style="font-size: 13px; line-height: 1.5; display:flex; flex-direction:column; gap:8px;">
+        <p>歡迎使用本站。為維護良好的學術分享與筆記交流環境，請嚴格遵守：</p>
+        <p><b>1. 版權歸屬：</b>所有上傳之試卷與筆記版權歸屬原作者或學校，僅供學術交流與複習備考使用。</p>
+        <p><b>2. 違規處置（Delete）：</b>嚴禁惡意上傳無關內容、色情暴力、廣告或侵權檔案，違者管理員將<b>直接刪除並永久封鎖該 Gmail 登入權限</b>。</p>
+        <p><b>3. 獎勵提醒：</b>積極上傳優質筆記與考卷（1:1 制度），<b>每個月 1 號系統將自動挑選 Top 3 英雄榜（含同分並列）派發筆記獎勵！</b></p>
+      </div>
+      <button type="button" class="btn-submit" onclick="closeCopyrightModal()">我已完全了解並同意</button>
+    </div>
+  </div>
+
+  <div id="admin-modal" class="modal">
+    <div class="admin-modal-content">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2>👑 管理員審核、私信、封鎖與自動派獎後台</h2>
+        <button class="modal-close" style="color:var(--text-color);" onclick="closeAdminModal()">&times;</button>
+      </div>
+
+      <div class="leaderboard-box" style="background: var(--header-purple); color: var(--header-text); padding: 12px; border-radius: 8px;">
+        <div class="leaderboard-title">🏆 Top 1-10 貢獻排行榜（管理員檢視區）</div>
+        <div id="admin-top10-list" style="font-size: 12px; line-height: 1.4;">載入中...</div>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; background: #f9f9fb; padding: 10px; border-radius: 8px;">
+        <div>
+          <label style="font-size: 13px; font-weight: bold;">查看面板：</label>
+          <select id="adminPanelTab" onchange="switchAdminTab()" style="padding: 6px; border-radius: 6px;">
+            <option value="papers" selected>資源審核管理</option>
+            <option value="feedbacks">寫信留言與求檔需求箱</option>
+            <option value="users">用戶名單 (Username/UID/Gmail)、私信與封鎖</option>
+          </select>
+        </div>
+        <div id="paper-filter-container">
+          <label style="font-size: 13px; font-weight: bold;">狀態：</label>
+          <select id="adminStatusFilter" onchange="renderAdminTable()" style="padding: 6px; border-radius: 6px;">
+            <option value="pending" selected>待審核</option>
+            <option value="approved">已通過</option>
+            <option value="all">全部</option>
+          </select>
+        </div>
+        <button onclick="fetchAdminData()" style="padding: 6px 12px; background:var(--primary-btn); color:white; border:none; border-radius:6px; cursor:pointer;">重新整理</button>
+      </div>
+      <div class="table-wrapper" style="flex-grow: 1;">
+        <table>
+          <thead id="admin-table-head">
+            <tr>
+              <th>狀態</th>
+              <th>分類/科目</th>
+              <th>學校/上載者(Username)/Gmail/備註</th>
+              <th>檔案/連結</th>
+              <th>管理操作</th>
+            </tr>
+          </thead>
+          <tbody id="admin-papers-list"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyDGYJiK6BNfl9h6d2eu32oKHjx1rdqXy9U",
+      authDomain: "uec-papers-4c1a7.firebaseapp.com",
+      databaseURL: "https://uec-papers-4c1a7-default-rtdb.firebaseio.com",
+      projectId: "uec-papers-4c1a7",
+      storageBucket: "uec-papers-4c1a7.firebasestorage.app",
+      messagingSenderId: "374691570353",
+      appId: "1:374691570353:web:75fe8c55160343b20af890",
+      measurementId: "G-323MBR471Y"
+    };
+
+    if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+
+    const DB_URL = "https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers.json";
+    const FEEDBACK_DB_URL = "https://uec-papers-4c1a7-default-rtdb.firebaseio.com/feedbacks.json";
+    const BANNED_DB_URL = "https://uec-papers-4c1a7-default-rtdb.firebaseio.com/bannedUsers.json";
+    const SYSTEM_STATE_URL = "https://uec-papers-4c1a7-default-rtdb.firebaseio.com/systemState.json";
+    const ADMIN_PASS = "Yitwan6988";
+    
+    let currentCategoryMode = 'uec';
+    let papersData = [];
+    let adminPaperList = [];
+    let adminFeedbackList = [];
+    let adminUsersList = [];
+    let currentUser = null;
+    let currentUsername = "";
+    let isRegisterMode = false;
+
+    const forbiddenWords = ["粗口", "admin123", "hack", "spam", "敏感詞1", "色情"];
+    function aiContentFilter(text) {
+      if (!text) return false;
+      const lower = text.toLowerCase();
+      for (let word of forbiddenWords) {
+        if (lower.includes(word)) return true;
+      }
+      return false;
+    }
+
+    window.onload = async () => {
+      document.getElementById('copyright-modal').style.display = 'flex';
+      fetchMarqueeRequests();
+      fetchPublicLeaderboard();
+      await checkAndAutoRewardTop3();
+    };
+
+    async function checkAndAutoRewardTop3() {
+      try {
+        const now = new Date();
+        const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
+        
+        const stateRes = await fetch(SYSTEM_STATE_URL);
+        const stateData = await stateRes.json() || {};
+        if (stateData.lastRewardMonth === currentMonthKey) return;
+        if (now.getDate() !== 1) return;
+
+        const res = await fetch(DB_URL);
+        const data = await res.json();
+        if (!data) return;
+        const pList = Object.values(data);
+
+        const userStats = {};
+        pList.forEach(p => {
+          if (p.approved === true && p.uploaderUid && p.uploader) {
+            if (!userStats[p.uploaderUid]) {
+              userStats[p.uploaderUid] = { name: p.uploader, count: 0 };
+            }
+            userStats[p.uploaderUid].count++;
+          }
+        });
+
+        const sortedUsers = Object.keys(userStats).map(uid => ({
+          uid,
+          name: userStats[uid].name,
+          count: userStats[uid].count
+        })).sort((a, b) => b.count - a.count);
+
+        if (sortedUsers.length === 0) return;
+
+        let rewardList = [];
+        let distinctRanks = 0;
+        let lastCount = -1;
+
+        for (let u of sortedUsers) {
+          if (u.count !== lastCount) {
+            distinctRanks++;
+            lastCount = u.count;
+          }
+          if (distinctRanks <= 3) {
+            rewardList.push(u);
+          } else {
+            break;
+          }
+        }
+
+        const notePapers = pList.filter(p => p.approved === true && p.category === 'notes');
+        if (notePapers.length === 0) return;
+        const rewardNoteId = notePapers[0].id;
+
+        for (let winner of rewardList) {
+          const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${winner.uid}.json`;
+          const uRes = await fetch(userRefUrl);
+          const uData = await uRes.json() || { unlockedIds: [] };
+          let unlockedIds = uData.unlockedIds || [];
+
+          if (!unlockedIds.includes(rewardNoteId)) {
+            unlockedIds.push(rewardNoteId);
+            await fetch(userRefUrl, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ unlockedIds: unlockedIds })
+            });
+          }
+        }
+
+        await fetch(SYSTEM_STATE_URL, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lastRewardMonth: currentMonthKey })
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function openCopyrightModal() { document.getElementById('copyright-modal').style.display = 'flex'; }
+    function closeCopyrightModal() { document.getElementById('copyright-modal').style.display = 'none'; }
+
+    async function checkIsBanned(email) {
+      if (!email) return false;
+      try {
+        const res = await fetch(BANNED_DB_URL);
+        const data = await res.json();
+        if (!data) return false;
+        const bannedList = Object.values(data);
+        return bannedList.includes(email.toLowerCase().trim());
+      } catch(e) {
+        return false;
+      }
+    }
+
+    async function resolveUsername(user) {
+      if (!user) return "";
+      const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${user.uid}.json`;
+      try {
+        const res = await fetch(userRefUrl);
+        let uData = await res.json();
+        
+        if (uData && uData.username) {
+          return uData.username;
+        }
+
+        let newName = prompt(`⚠️ 系統升級：檢測到您的帳號尚未設定專屬 Username。\n請輸入您的 Username（用於英雄榜與上傳署名）：`, user.email.split('@')[0]);
+        if (!newName || !newName.trim()) {
+          newName = "學霸_" + user.uid.substring(0, 4);
+        }
+        newName = newName.trim();
+
+        if (!uData) uData = { email: user.email, unlockedIds: [] };
+        uData.username = newName;
+
+        await fetch(userRefUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(uData)
+        });
+
+        alert(`✓ Username 設定成功：${newName}`);
+        return newName;
+      } catch(e) {
+        return user.email.split('@')[0];
+      }
+    }
+
+    firebase.auth().onAuthStateChanged(async (user) => {
+      if (user) {
+        const banned = await checkIsBanned(user.email);
+        if (banned) {
+          alert("⚠️ 此 Gmail 帳號已被管理員永久封鎖，無法登入！");
+          await firebase.auth().signOut();
+          currentUser = null;
+          currentUsername = "";
+          updateLoginButton();
+          return;
+        }
+        currentUser = user;
+        currentUsername = await resolveUsername(user);
+      } else {
+        currentUser = null;
+        currentUsername = "";
+      }
+      updateLoginButton();
+    });
+
+    function updateLoginButton() {
+      const loginBtn = document.getElementById('login-status-btn');
+      if (currentUser) {
+        loginBtn.innerText = "登出 (" + currentUsername + ")";
+        loginBtn.style.background = "#d32f2f";
+      } else {
+        loginBtn.innerText = "登入";
+        loginBtn.style.background = "var(--primary-btn)";
+      }
+    }
+
+    function openAuthView() {
+      if (currentUser) {
+        if (confirm(`目前已登入：${currentUsername} (${currentUser.email})\n確定要登出帳號嗎？`)) {
+          firebase.auth().signOut().then(() => { showMenu(); });
+        }
+        return;
+      }
+      isRegisterMode = false;
+      updateAuthFormUI();
+      hideAllViews();
+      document.getElementById('auth-view').style.display = 'block';
+    }
+
+    function toggleAuthMode() {
+      isRegisterMode = !isRegisterMode;
+      updateAuthFormUI();
+    }
+
+    function updateAuthFormUI() {
+      const title = document.getElementById('auth-title');
+      const submitBtn = document.getElementById('auth-submit-btn');
+      const switchText = document.getElementById('switch-auth-mode');
+      const usernameGroup = document.getElementById('reg-username-group');
+
+      if (isRegisterMode) {
+        title.innerText = "📝 免費帳號註冊";
+        submitBtn.innerText = "確認註冊";
+        switchText.innerText = "已有帳號？點此直接登入";
+        usernameGroup.style.display = "flex";
+      } else {
+        title.innerText = "🔐 帳號登入";
+        submitBtn.innerText = "立即登入";
+        switchText.innerText = "還沒有帳號？點此免費註冊";
+        usernameGroup.style.display = "none";
+      }
+    }
+
+    async function handleAuth() {
+      const email = document.getElementById('authEmail').value.trim();
+      const password = document.getElementById('authPassword').value;
+      const usernameInput = document.getElementById('authUsername').value.trim();
+      const submitBtn = document.getElementById('auth-submit-btn');
+
+      if (!email || !password) {
+        alert("請填寫電子郵件與密碼！");
+        return;
+      }
+
+      if (isRegisterMode && !usernameInput) {
+        alert("註冊時必須填寫 Username（用戶名）！");
+        return;
+      }
+
+      const banned = await checkIsBanned(email);
+      if (banned) {
+        alert("⚠️ 此 Gmail 帳號已被管理員永久封鎖，無法登入！");
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.innerText = '處理中...';
+
+      try {
+        if (isRegisterMode) {
+          if (aiContentFilter(usernameInput)) {
+            alert("⚠️ 您的 Username 包含違規或敏感字眼，已被 AI 安全過濾器攔截！");
+            submitBtn.disabled = false;
+            submitBtn.innerText = "確認註冊";
+            return;
+          }
+
+          const userCred = await firebase.auth().createUserWithEmailAndPassword(email, password);
+          await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${userCred.user.uid}.json`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email, username: usernameInput, unlockedIds: [] })
+          });
+          alert("註冊成功並已自動登入！");
+        } else {
+          await firebase.auth().signInWithEmailAndPassword(email, password);
+          alert("登入成功！");
+        }
+        document.getElementById('authEmail').value = '';
+        document.getElementById('authPassword').value = '';
+        document.getElementById('authUsername').value = '';
+        openCopyrightModal();
+        showMenu();
+      } catch (err) {
+        alert("操作失敗: " + err.message);
+      } finally {
+        submitBtn.disabled = false;
+        updateAuthFormUI();
+      }
+    }
+
+    document.getElementById('theme-toggle').onclick = () => document.body.classList.toggle('dark-mode');
+    const mainMenu = document.getElementById('main-menu');
+    const uploadView = document.getElementById('upload-view');
+    const downloadView = document.getElementById('download-view');
+    const feedbackView = document.getElementById('feedback-view');
+
+    function hideAllViews() {
+      mainMenu.style.display = 'none';
+      uploadView.style.display = 'none';
+      downloadView.style.display = 'none';
+      feedbackView.style.display = 'none';
+      document.getElementById('auth-view').style.display = 'none';
+    }
+
+    function showMenu() {
+      hideAllViews();
+      mainMenu.style.display = 'flex';
+      fetchMarqueeRequests();
+      fetchPublicLeaderboard();
+    }
+
+    document.getElementById('btn-upload').onclick = () => {
+      if (!currentUser) {
+        alert("請先登入帳號才能上傳！");
+        openAuthView();
+        return;
+      }
+      hideAllViews();
+      uploadView.style.display = 'block';
+    };
+
+    document.getElementById('btn-feedback').onclick = () => {
+      if (!currentUser) {
+        alert("請先登入帳號才能使用意見反饋與求檔箱！");
+        openAuthView();
+        return;
+      }
+      hideAllViews();
+      feedbackView.style.display = 'block';
+    };
+
+    document.getElementById('btn-download-uec').onclick = () => openDownloadPage('uec');
+    document.getElementById('btn-download-junior').onclick = () => openDownloadPage('junior');
+    document.getElementById('btn-notes-section').onclick = () => openDownloadPage('notes');
+
+    async function openDownloadPage(mode) {
+      if (!currentUser) {
+        if (confirm("您需要先登入帳號才能查看或下載資源。是否前往登入？")) {
+          openAuthView();
+        }
+        return;
+      }
+      hideAllViews();
+      downloadView.style.display = 'block';
+      currentCategoryMode = mode;
+      
+      let titleText = '↓ 資源下載區';
+      if (mode === 'uec') titleText = '↓ 統考預試專區 (2026/2025/歷年)';
+      if (mode === 'junior') titleText = '↓ 初中部專區 (初一/初二/初三 + 練習)';
+      if (mode === 'notes') titleText = '↓ 學霸筆記專區 (Top 1-10 獎勵領取)';
+      document.getElementById('download-title').innerText = titleText;
+      
+      document.getElementById('searchInput').value = '';
+      await fetchPapers();
+    }
+
+    async function fetchPapers() {
+      const listContainer = document.getElementById('papers-list');
+      listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px;">資料載入中...</td></tr>';
+
+      try {
+        const response = await fetch(DB_URL);
+        const data = await response.json();
+        
+        papersData = [];
+        if (data) {
+          papersData = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+        }
+
+        const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${currentUser.uid}.json`;
+        const userRes = await fetch(userRefUrl);
+        const userData = await userRes.json() || { unlockedIds: [] };
+        const unlockedIds = userData.unlockedIds || [];
+
+        const filtered = papersData.filter(p => {
+          if (p.approved !== true) return false;
+          const cat = p.category || '2026';
+          if (currentCategoryMode === 'uec') {
+            return ['2026', '2025', 'old'].includes(cat);
+          } else if (currentCategoryMode === 'junior') {
+            return ['junior1', 'junior2', 'junior3', 'exercise'].includes(cat);
+          } else if (currentCategoryMode === 'notes') {
+            return cat === 'notes';
+          }
+          return true;
+        });
+
+        const banner = document.getElementById('unlock-status-banner');
+        banner.innerHTML = `📊 您目前已解鎖 <b>${unlockedIds.length}</b> 份資源 (1:1 制度)。每月 1 號英雄榜自動派獎！`;
+
+        renderFilteredPapers(filtered, unlockedIds);
+      } catch (err) {
+        listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px; color:red;">載入失敗</td></tr>';
+      }
+    }
+
+    function renderFilteredPapers(filteredData, unlockedIds) {
+      const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+      const listContainer = document.getElementById('papers-list');
+      listContainer.innerHTML = '';
+
+      let visiblePapers = filteredData.filter(item => {
+        if (!unlockedIds.includes(item.id)) return false;
+        if (item.uploaderUid === currentUser.uid) return false;
+        return true;
+      });
+
+      if (keyword) {
+        visiblePapers = visiblePapers.filter(item => {
+          return (item.subject && item.subject.toLowerCase().includes(keyword)) ||
+                 (item.school && item.school.toLowerCase().includes(keyword)) ||
+                 (item.year && item.year.toLowerCase().includes(keyword));
+        });
+      }
+
+      if (visiblePapers.length === 0) {
+        listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px; opacity:0.7;">無符合條件的已解鎖資源（不顯示自己上傳的項目）。多上傳可自動隨機解鎖更多！</td></tr>';
+        return;
+      }
+
+      visiblePapers.forEach(item => {
+        const tr = document.createElement('tr');
+        const catLabel = getCategoryLabel(item.category);
+        const msgNotice = item.adminMsg ? `<div style="font-size:11px; color:#1976d2; margin-top:2px;">管理員備註：${escapeHtml(item.adminMsg)}</div>` : '';
+        tr.innerHTML = `
+          <td><span class="year-tag">${catLabel}</span><b>${escapeHtml(item.subject)}</b>${msgNotice}</td>
+          <td>${escapeHtml(item.school)}<div class="uploader-tag">由 ${escapeHtml(item.uploader)} 上傳</div></td>
+          <td><button class="download-btn" onclick="openViewer('${item.id}')">👁️ 查看</button></td>
+        `;
+        listContainer.appendChild(tr);
+      });
+    }
+
+    function filterPapersList() {
+      fetchPapers();
+    }
+
+    function getCategoryLabel(cat) {
+      const map = {
+        '2026': '2026預試',
+        '2025': '2025預試',
+        'old': '歷年試卷',
+        'junior1': '初一',
+        'junior2': '初二',
+        'junior3': '初三',
+        'exercise': '練習題',
+        'notes': '學霸筆記'
+      };
+      return map[cat] || '一般';
+    }
+
+    async function fetchPublicLeaderboard() {
+      try {
+        const res = await fetch(DB_URL);
+        const data = await res.json();
+        const top10Box = document.getElementById('public-top10-list');
+        if (!data) {
+          top10Box.innerHTML = '目前尚無上傳紀錄';
+          return;
+        }
+        const pList = Object.values(data);
+        const uploaderCounts = {};
+        pList.forEach(p => {
+          if (p.approved === true && p.uploader) {
+            uploaderCounts[p.uploader] = (uploaderCounts[p.uploader] || 0) + 1;
+          }
+        });
+
+        const sorted = Object.keys(uploaderCounts).map(name => ({ name, count: uploaderCounts[name] }))
+                             .sort((a, b) => b.count - a.count);
+
+        if (sorted.length === 0) {
+          top10Box.innerHTML = '尚無通過審核的上傳紀錄';
+          return;
+        }
+
+        let html = '';
+        sorted.slice(0, 10).forEach((item, index) => {
+          const medals = ['🥇', '🥈', '🥉'];
+          const rankPrefix = medals[index] || `<b>#${index + 1}</b>`;
+          html += `<div>${rankPrefix} <b>${escapeHtml(item.name)}</b></div>`;
+        });
+        top10Box.innerHTML = html;
+      } catch(e) {
+        console.error(e);
+      }
+    }
+
+    async function fetchMarqueeRequests() {
+      try {
+        const res = await fetch(FEEDBACK_DB_URL);
+        const data = await res.json();
+        const marqueeBox = document.getElementById('marquee-box');
+        const marqueeContent = document.getElementById('marquee-content');
+        
+        if (!data) {
+          marqueeBox.style.display = 'none';
+          return;
+        }
+
+        const items = Object.keys(data).map(k => ({ id: k, ...data[k] }));
+        const requests = items.filter(i => i.content && (i.content.includes('求') || i.content.includes('筆記') || i.content.includes('Gmail') || i.content.includes('私信')));
+
+        if (requests.length > 0) {
+          marqueeBox.style.display = 'flex';
+          let html = '';
+          requests.forEach(r => {
+            html += `<div class="marquee-item">✉️ 【留言信件/求檔需求】${escapeHtml(r.content)} (來自: ${escapeHtml(r.name)})</div>`;
+          });
+          marqueeContent.innerHTML = html;
+        } else {
+          marqueeBox.style.display = 'none';
+        }
+      } catch(e) {
+        console.error(e);
+      }
+    }
+
+    async function handleFeedbackSubmit() {
+      const content = document.getElementById('feedbackContent').value.trim();
+      const submitBtn = document.getElementById('feedback-submit-btn');
+
+      if (!content) {
+        alert("請填寫信件或求檔內容！");
+        return;
+      }
+
+      if (aiContentFilter(content)) {
+        alert("⚠️ 您的留言內容包含違規或敏感字眼，已被 AI 安全過濾器攔截！");
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.innerText = '送出中...';
+
+      const feedbackData = {
+        name: currentUsername || (currentUser ? currentUser.email : '匿名同學'),
+        content: content,
+        createdAt: Date.now()
+      };
+
+      try {
+        const res = await fetch(FEEDBACK_DB_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(feedbackData)
+        });
+
+        if (!res.ok) throw new Error("送出失敗");
+
+        alert("成功送出信件與需求！內容已同步至管理員後台與首頁跑馬燈。");
+        document.getElementById('feedbackContent').value = '';
+        showMenu();
+      } catch (err) {
+        alert("送出失敗：" + err.message);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = '送出信件與需求';
+      }
+    }
+
+    function openAdminLogin() {
+      const pass = prompt("請輸入管理員密碼:");
+      if (pass === ADMIN_PASS) {
+        document.getElementById('admin-modal').style.display = 'flex';
+        fetchAdminData();
+      } else if (pass !== null) {
+        alert("密碼錯誤！");
+      }
+    }
+
+    function closeAdminModal() {
+      document.getElementById('admin-modal').style.display = 'none';
+      fetchPublicLeaderboard();
+    }
+
+    function switchAdminTab() {
+      const tab = document.getElementById('adminPanelTab').value;
+      const filterContainer = document.getElementById('paper-filter-container');
+      if (tab === 'feedbacks') {
+        filterContainer.style.display = 'none';
+        renderAdminFeedbacks();
+      } else if (tab === 'users') {
+        filterContainer.style.display = 'none';
+        renderAdminUsers();
+      } else {
+        filterContainer.style.display = 'block';
+        renderAdminTable();
+      }
+    }
+
+    async function fetchAdminData() {
+      try {
+        const res = await fetch(DB_URL);
+        const data = await res.json();
+        adminPaperList = [];
+        if (data) {
+          adminPaperList = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+          papersData = adminPaperList;
+        }
+
+        const fRes = await fetch(FEEDBACK_DB_URL);
+        const fData = await fRes.json();
+        adminFeedbackList = [];
+        if (fData) {
+          adminFeedbackList = Object.keys(fData).map(key => ({ id: key, ...fData[key] }));
+        }
+
+        const uRes = await fetch("https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users.json");
+        const uData = await uRes.json();
+        adminUsersList = [];
+        if (uData) {
+          adminUsersList = Object.keys(uData).map(key => ({ uid: key, ...uData[key] }));
+        }
+
+        computeAdminTop10Leaderboard();
+        switchAdminTab();
+      } catch (err) {
+        alert("載入後台數據失敗");
+      }
+    }
+
+    function computeAdminTop10Leaderboard() {
+      const uploaderCounts = {};
+      adminPaperList.forEach(p => {
+        if (p.approved === true && p.uploader) {
+          uploaderCounts[p.uploader] = (uploaderCounts[p.uploader] || 0) + 1;
+        }
+      });
+
+      const sorted = Object.keys(uploaderCounts).map(name => ({ name, count: uploaderCounts[name] }))
+                           .sort((a, b) => b.count - a.count);
+
+      const top10Box = document.getElementById('admin-top10-list');
+      if (sorted.length === 0) {
+        top10Box.innerHTML = '目前尚無通過審核的上傳紀錄';
+        return;
+      }
+
+      let html = '';
+      sorted.slice(0, 10).forEach((item, index) => {
+        const medals = ['🥇', '🥈', '🥉'];
+        const rankPrefix = medals[index] || `#${index + 1}`;
+        html += `<div>${rankPrefix} <b>${escapeHtml(item.name)}</b> — 通過 ${item.count} 份資源</div>`;
+      });
+      top10Box.innerHTML = html;
+    }
+
+    function renderAdminTable() {
+      const tbody = document.getElementById('admin-papers-list');
+      const thead = document.getElementById('admin-table-head');
+      thead.innerHTML = `
+        <tr>
+          <th>狀態</th>
+          <th>分類/科目</th>
+          <th>學校/上載者(Username)/Gmail/備註</th>
+          <th>檔案/連結</th>
+          <th>管理操作</th>
+        </tr>
+      `;
+      const filter = document.getElementById('adminStatusFilter').value;
+      tbody.innerHTML = '';
+
+      const list = adminPaperList.filter(item => {
+        if (filter === 'pending') return item.approved !== true;
+        if (filter === 'approved') return item.approved === true;
+        return true;
+      });
+
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="padding:16px; opacity:0.6;">無相關數據</td></tr>';
+        return;
+      }
+
+      list.forEach(item => {
+        const tr = document.createElement('tr');
+        const isAppr = item.approved === true;
+        const badge = isAppr ? '<span class="status-badge status-approved">已通過</span>' : '<span class="status-badge status-pending">待審核</span>';
+        const approveBtn = !isAppr ? `<button class="btn-approve" onclick="approvePaper('${item.id}')">批准並1:1隨機解鎖</button>` : '';
+        const customUnlockBtn = !isAppr ? `<button class="btn-approve" style="background:#0288d1; margin-top:2px;" onclick="approveWithSpecificPaper('${item.id}')">🎯 1:1 指定解鎖Main Page資源</button>` : '';
+
+        let fileActionHtml = '';
+        if (item.link) {
+          if (item.link.startsWith('data:image/') || item.link.startsWith('data:application/pdf') || item.link.startsWith('http')) {
+            fileActionHtml = `<button class="btn-view-admin" onclick="openViewer('${item.id}')">👁️ 預覽</button>`;
+          } else {
+            fileActionHtml = `<span style="font-size:11px; opacity:0.5;">格式不支援</span>`;
+          }
+        } else {
+          fileActionHtml = '<span style="font-size:11px; opacity:0.5;">無檔案</span>';
+        }
+
+        const gmailInfo = item.uploaderEmail ? `<br><small style="color:#666;">Gmail: ${escapeHtml(item.uploaderEmail)}</small>` : '';
+        const remarkHtml = item.remark ? `<br><small style="color:#d97706; font-weight:bold;">備註要求：${escapeHtml(item.remark)}</small>` : '';
+        const msgHtml = item.adminMsg ? `<br><small style="color:#2e7d32;">回覆：${escapeHtml(item.adminMsg)}</small>` : '';
+
+        tr.innerHTML = `
+          <td>${badge}</td>
+          <td>[${getCategoryLabel(item.category)}]<b><br>${escapeHtml(item.subject)}</b></td>
+          <td>${escapeHtml(item.school)}<br><small>由 <b>${escapeHtml(item.uploader)}</b> 上傳</small>${gmailInfo}${remarkHtml}${msgHtml}</td>
+          <td>${fileActionHtml}</td>
+          <td>
+            <div class="action-btns">
+              ${approveBtn}
+              ${customUnlockBtn}
+              <button class="btn-edit" onclick="editAdminPaper('${item.id}')">編輯</button>
+              <button class="btn-edit" style="background:#8e24aa;" onclick="changePaperUploader('${item.id}', '${escapeHtml(item.uploader)}')">改名字</button>
+              <button class="btn-delete" onclick="deleteAdminPaper('${item.id}')">刪除</button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderAdminFeedbacks() {
+      const tbody = document.getElementById('admin-papers-list');
+      const thead = document.getElementById('admin-table-head');
+      thead.innerHTML = `
+        <tr>
+          <th>時間</th>
+          <th>提交者 (Username)</th>
+          <th>寫信與求檔內容</th>
+          <th>操作</th>
+        </tr>
+      `;
+      tbody.innerHTML = '';
+
+      if (adminFeedbackList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="padding:16px; opacity:0.6;">目前尚無信件留言</td></tr>';
+        return;
+      }
+
+      adminFeedbackList.forEach(item => {
+        const tr = document.createElement('tr');
+        const dateStr = new Date(item.createdAt).toLocaleString();
+        tr.innerHTML = `
+          <td><span style="font-size:11px;">${dateStr}</span></td>
+          <td><b>${escapeHtml(item.name)}</b></td>
+          <td style="text-align:left; padding: 10px; max-width: 250px; word-break: break-all;">${escapeHtml(item.content)}</td>
+          <td><button class="btn-delete" onclick="deleteFeedback('${item.id}')">刪除</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderAdminUsers() {
+      const tbody = document.getElementById('admin-papers-list');
+      const thead = document.getElementById('admin-table-head');
+      thead.innerHTML = `
+        <tr>
+          <th>Username</th>
+          <th>UID</th>
+          <th>註冊 Gmail</th>
+          <th>管理操作 (私信 / 封鎖)</th>
+        </tr>
+      `;
+      tbody.innerHTML = '';
+
+      if (adminUsersList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="padding:16px; opacity:0.6;">尚無註冊用戶紀錄</td></tr>';
+        return;
+      }
+
+      adminUsersList.forEach(u => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><b>${escapeHtml(u.username || '未設定')}</b></td>
+          <td><small>${u.uid}</small></td>
+          <td><b>${escapeHtml(u.email || '未知信箱')}</b></td>
+          <td>
+            <div class="action-btns">
+              <button class="btn-edit" onclick="sendAdminMessageToUser('${u.uid}', '${u.email || ''}')">✉️ 發送私信</button>
+              <button class="btn-delete" onclick="banUser('${u.email}')">永久封鎖</button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function changePaperUploader(id, currentUploader) {
+      const newUploader = prompt(`請輸入正確的上傳者 Username (原為: ${currentUploader})：`, currentUploader);
+      if (newUploader === null || !newUploader.trim()) return;
+
+      try {
+        await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uploader: newUploader.trim() })
+        });
+        alert("作者 Username 修改成功！排行榜將自動重新計算。");
+        fetchAdminData();
+      } catch (err) {
+        alert("修改失敗：" + err.message);
+      }
+    }
+
+    async function sendAdminMessageToUser(uid, email) {
+      const msg = prompt(`請輸入要發送給用戶 (${email || uid}) 的私信內容：`);
+      if (!msg) return;
+
+      try {
+        const adminMsgData = {
+          name: "👑 管理員",
+          content: `[私信通知 @ ${email || uid}] ${msg}`,
+          createdAt: Date.now(),
+          targetUid: uid
+        };
+        await fetch(FEEDBACK_DB_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(adminMsgData)
+        });
+        alert("私信已成功發送！");
+        fetchMarqueeRequests();
+      } catch(e) {
+        alert("發送失敗：" + e.message);
+      }
+    }
+
+    async function banUser(email) {
+      if (!email) {
+        alert("此用戶無有效信箱");
+        return;
+      }
+      if (confirm(`確定要封鎖 Gmail: ${email} 嗎？\n封鎖後該帳號將無法再登入系統！`)) {
+        try {
+          await fetch(BANNED_DB_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(email.toLowerCase().trim())
+          });
+          alert(`已成功封鎖 ${email}！`);
+          fetchAdminData();
+        } catch(e) {
+          alert("封鎖失敗：" + e.message);
+        }
+      }
+    }
+
+    async function deleteFeedback(id) {
+      if (confirm("確定刪除此留言信件？")) {
+        await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/feedbacks/${id}.json`, { method: 'DELETE' });
+        fetchAdminData();
+        fetchMarqueeRequests();
+      }
+    }
+
+    async function editAdminPaper(id) {
+      const paper = adminPaperList.find(p => p.id === id);
+      if (!paper) return;
+
+      const newSubject = prompt("修改科目名稱:", paper.subject || '');
+      if (newSubject === null) return;
+      const newSchool = prompt("修改學校名稱:", paper.school || '');
+      if (newSchool === null) return;
+
+      try {
+        await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subject: newSubject.trim(), school: newSchool.trim() })
+        });
+        alert("修改成功！");
+        fetchAdminData();
+      } catch (err) {
+        alert("修改失敗");
+      }
+    }
+
+    async function approvePaper(id) {
+      const paper = adminPaperList.find(p => p.id === id);
+      if (!paper) return;
+
+      try {
+        await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ approved: true, adminMsg: "審核通過 (1:1 隨機解鎖)！" })
+        });
+
+        if (paper.uploaderUid) {
+          const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${paper.uploaderUid}.json`;
+          const uRes = await fetch(userRefUrl);
+          let userData = await uRes.json();
+          if (!userData) userData = { unlockedIds: [] };
+          let unlockedIds = userData.unlockedIds || [];
+
+          const allRes = await fetch(DB_URL);
+          const allData = await allRes.json() || {};
+          
+          let allApproved = Object.keys(allData).map(k => ({ id: k, ...allData[k] })).filter(p => p.approved === true);
           let available = allApproved.filter(p => p.uploaderUid !== paper.uploaderUid && !unlockedIds.includes(p.id));
 
           if (available.length > 0) {
