@@ -243,7 +243,7 @@
       <div class="form-group">
         <label>📁 選擇本地檔案 (PDF / 圖片)</label>
         <input type="file" id="paperFile" accept=".pdf,image/*" />
-        <span class="file-hint">⚠️ 建議檔案小於 5MB，避免雲端寫入失敗</span>
+        <span class="file-hint">⚠️ 建議檔案小於 8MB</span>
       </div>
 
       <div class="or-divider">── 或填寫網絡連結 ──</div>
@@ -469,8 +469,8 @@
 
         const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${currentUser.uid}.json`;
         const userRes = await fetch(userRefUrl);
-        const userData = await userRes.json() || { uploadedCount: 0 };
-        const uploadedCount = userData.uploadedCount || 0;
+        const userData = await userRes.json() || { uploadedCount: 0, unlockedIds: [] };
+        const unlockedIds = userData.unlockedIds || [];
 
         const filtered = papersData.filter(p => {
           if (p.approved !== true) return false;
@@ -479,21 +479,20 @@
         });
 
         const banner = document.getElementById('unlock-status-banner');
-        if (uploadedCount === 0) {
-          banner.innerHTML = `⚠️ 您目前獲批上傳 <b>0</b> 份，可查看 <b>0</b> 份。`;
-        } else if (uploadedCount >= filtered.length) {
-          banner.innerHTML = `🎉 您已獲批上傳 <b>${uploadedCount}</b> 份，已解鎖此分類全部考卷！`;
+        const unlockedCount = unlockedIds.length;
+        if (unlockedCount === 0) {
+          banner.innerHTML = `⚠️ 您目前已解鎖 <b>0</b> 份考卷。請上傳並等待審批解鎖！`;
         } else {
-          banner.innerHTML = `📊 您已獲批上傳 <b>${uploadedCount}</b> 份，可查看 <b>${uploadedCount}</b> 份。`;
+          banner.innerHTML = `📊 您目前已解鎖 <b>${unlockedCount}</b> 份考卷。`;
         }
 
-        renderPapers(filtered, uploadedCount);
+        renderPapers(filtered, unlockedIds);
       } catch (err) {
         listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px; color:red;">載入失敗</td></tr>';
       }
     }
 
-    function renderPapers(filteredData, allowedCount) {
+    function renderPapers(filteredData, unlockedIds) {
       const listContainer = document.getElementById('papers-list');
       listContainer.innerHTML = '';
 
@@ -502,8 +501,14 @@
         return;
       }
 
-      const visiblePapers = filteredData.slice(0, allowedCount);
+      // 只顯示已經在此用戶解鎖名單內的考卷（不重複、隨機指定不重複）
+      const visiblePapers = filteredData.filter(item => unlockedIds.includes(item.id));
       const lockedCount = Math.max(0, filteredData.length - visiblePapers.length);
+
+      if (visiblePapers.length === 0) {
+        listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px; opacity:0.7;">尚無解鎖的考卷，請上傳試卷等待管理員審核解鎖！</td></tr>';
+        return;
+      }
 
       visiblePapers.forEach(item => {
         const tr = document.createElement('tr');
@@ -520,7 +525,7 @@
         const lockTr = document.createElement('tr');
         lockTr.innerHTML = `
           <td colspan="3" style="padding: 14px; background: rgba(0,0,0,0.03); font-size: 13px; opacity: 0.7;">
-            🔒 還有 <b>${lockedCount}</b> 份考卷被鎖定。請上傳檔案等管理員審批解鎖！
+            🔒 還有 <b>${lockedCount}</b> 份考卷被鎖定。再上傳並通過審核即可隨機解鎖新考卷！
           </td>
         `;
         listContainer.appendChild(lockTr);
@@ -580,7 +585,7 @@
         const tr = document.createElement('tr');
         const isAppr = item.approved === true;
         const badge = isAppr ? '<span class="status-badge status-approved">已通過</span>' : '<span class="status-badge status-pending">待審核</span>';
-        const approveBtn = !isAppr ? `<button class="btn-approve" onclick="approvePaper('${item.id}')">批准</button>` : '';
+        const approveBtn = !isAppr ? `<button class="btn-approve" onclick="approvePaper('${item.id}')">批准並隨機解鎖</button>` : '';
 
         let fileActionHtml = '';
         if (item.link) {
@@ -648,40 +653,67 @@
       const paper = adminPaperList.find(p => p.id === id);
       if (!paper) return;
 
-      const adminMsg = prompt(`審批批准並解鎖額度：\n請輸入要給用戶的回覆訊息：`, "已審核通過，祝您備考順利！");
-      if (adminMsg === null) return;
-
       try {
-        const res = await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
+        // 1. 批准該筆試卷
+        await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             approved: true,
-            adminMsg: adminMsg.trim() 
+            adminMsg: "已審核通過並為您隨機解鎖新考卷！" 
           })
         });
 
-        if (!res.ok) throw new Error("Approval failed");
-
+        // 2. 如果有上傳者 UID，幫他隨機解鎖一份【不重複自己】的已審核考卷
         if (paper.uploaderUid) {
           const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${paper.uploaderUid}.json`;
           const uRes = await fetch(userRefUrl);
-          const uData = await uRes.json() || { uploadedCount: 0 };
-          const newCount = (uData.uploadedCount || 0) + 1;
+          const userData = await uRes.json() || { unlockedIds: [] };
+          let unlockedIds = userData.unlockedIds || [];
 
-          await fetch(userRefUrl, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uploadedCount: newCount })
+          // 撈出所有已通過審核的考卷
+          const allPapersRes = await fetch(DB_URL);
+          const allPapersData = await allPapersRes.json() || {};
+          
+          // 過濾出：1. 已批准 2. 不是自己上傳的 3. 還沒被該用戶解鎖過的
+          const availablePapers = Object.keys(allPapersData).map(k => ({ id: k, ...allPapersData[k] })).filter(p => {
+            if (p.approved !== true) return false;
+            if (p.uploaderUid === paper.uploaderUid) return false; // 排除自己上傳的
+            if (unlockedIds.includes(p.id)) return false; // 排除已經解鎖過的
+            return true;
           });
+
+          if (availablePapers.length > 0) {
+            // 隨機挑選一份
+            const randomIndex = Math.floor(Math.random() * availablePapers.length);
+            const selectedPaper = availablePapers[randomIndex];
+            unlockedIds.push(selectedPaper.id);
+
+            // 更新用戶的解鎖清單
+            await fetch(userRefUrl, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ unlockedIds: unlockedIds })
+            });
+            alert(`審批成功！已為上傳者隨機解鎖考卷：${selectedPaper.subject} (${selectedPaper.school})`);
+          } else {
+            // 如果沒有其他人的考卷可解鎖，把自己的這份加進去（避免沒得看）
+            if (!unlockedIds.includes(id)) {
+              unlockedIds.push(id);
+              await fetch(userRefUrl, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ unlockedIds: unlockedIds })
+              });
+            }
+            alert("審批成功！目前暫無其他用戶的考卷可供隨機解鎖，已解鎖您剛上傳的考卷。");
+          }
         }
 
-        alert("審批成功！");
         paper.approved = true;
-        paper.adminMsg = adminMsg.trim();
         renderAdminTable();
       } catch (err) {
-        alert("操作失敗，請檢查網絡連線");
+        alert("操作失敗，請檢查網絡連線：" + err.message);
       }
     }
 
@@ -703,20 +735,17 @@
 
       const link = paper.link;
 
-      // 如果是網址（例如 Google Drive 連結），直接開新分頁
       if (link.startsWith('http://') || link.startsWith('https://')) {
         modalBody.innerHTML = `<div style="color:white; padding:20px; text-align:center;">此為外部連結，將為您開啟分頁：<br><br><a href="${link}" target="_blank" style="color:#64b5f6; font-size:16px; text-decoration:underline;">點此開啟雲端連結</a></div>`;
         window.open(link, '_blank');
         return;
       }
 
-      // 如果是圖片
       if (link.startsWith('data:image/')) {
         modalBody.innerHTML = `<img src="${link}">`;
         return;
       }
 
-      // 如果是 PDF
       if (link.startsWith('data:application/pdf') || link.includes('pdf')) {
         modalBody.innerHTML = '';
         try {
@@ -737,7 +766,6 @@
             await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
           }
         } catch(e) {
-          // 如果解析失敗，提供直接下載或開新分頁按鈕，避免畫面卡死
           modalBody.innerHTML = `
             <div style="color:white; padding:30px; text-align:center;">
               <p>無法在線預覽此 PDF 檔案</p><br>
@@ -780,7 +808,7 @@
       let fileUrl = urlInput.value.trim();
       if (fileInput.files[0]) {
         if (fileInput.files[0].size > 8 * 1024 * 1024) {
-          alert("檔案大於 8MB，為避免上傳失敗，請使用 Google Drive 連結上傳！");
+          alert("檔案大於 8MB，請使用 Google Drive 連結上傳！");
           submitBtn.disabled = false;
           submitBtn.innerText = '上傳送審 (需管理員審核)';
           return;
