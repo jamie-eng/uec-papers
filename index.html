@@ -222,7 +222,7 @@
   </div>
 
   <main id="main-menu">
-    <!-- 公開 Top 1-10 排行榜 (僅顯示名字與排名) -->
+    <!-- 公開 Top 1-10 排行榜 (僅顯示名字) -->
     <div class="public-leaderboard">
       <div class="public-leaderboard-title">🏆 貢獻英雄榜 (Top 1 - 10) —— 每月 1 號自動派發筆記獎勵</div>
       <div class="public-top10-items" id="public-top10-list">載入中...</div>
@@ -400,7 +400,7 @@
           <label style="font-size: 13px; font-weight: bold;">查看面板：</label>
           <select id="adminPanelTab" onchange="switchAdminTab()" style="padding: 6px; border-radius: 6px;">
             <option value="papers" selected>資源審核管理</option>
-            <option value="feedbacks">寫信留言與求檔需求</option>
+            <option value="feedbacks" id="tab-option-feedbacks">寫信留言與求檔需求箱</option>
             <option value="users">用戶名單 (UID/Gmail)、私信與封鎖</option>
           </select>
         </div>
@@ -476,18 +476,14 @@
       await checkAndAutoRewardTop3();
     };
 
-    // 每月 1 號自動派獎邏輯 (若無上傳則不亂抽；支援並列第三名同分一起給)
     async function checkAndAutoRewardTop3() {
       try {
         const now = new Date();
-        const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`; // e.g. "2026-9"
+        const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
         
-        // 檢查本月是否已派獎過
         const stateRes = await fetch(SYSTEM_STATE_URL);
         const stateData = await stateRes.json() || {};
-        if (stateData.lastRewardMonth === currentMonthKey) return; // 本月已派過
-
-        // 僅在每個月 1 號或之後自動觸發檢查
+        if (stateData.lastRewardMonth === currentMonthKey) return;
         if (now.getDate() !== 1) return;
 
         const res = await fetch(DB_URL);
@@ -495,7 +491,6 @@
         if (!data) return;
         const pList = Object.values(data);
 
-        // 統計每個 uploaderUid 的上傳數與對應名稱
         const userStats = {};
         pList.forEach(p => {
           if (p.approved === true && p.uploaderUid && p.uploader) {
@@ -512,9 +507,8 @@
           count: userStats[uid].count
         })).sort((a, b) => b.count - a.count);
 
-        if (sortedUsers.length === 0) return; // 沒人上傳過則不派獎
+        if (sortedUsers.length === 0) return;
 
-        // 找出 Top 3 (支援同分並列，例如第三名有兩個人分數相同，則兩人都拿獎)
         let rewardList = [];
         let distinctRanks = 0;
         let lastCount = -1;
@@ -531,12 +525,10 @@
           }
         }
 
-        // 取得所有「學霸筆記」類別的 ID 作為獎勵池
         const notePapers = pList.filter(p => p.approved === true && p.category === 'notes');
-        if (notePapers.length === 0) return; // 網站上沒有筆記可送就不執行
-        const rewardNoteId = notePapers[0].id; // 預設送第一份精選筆記
+        if (notePapers.length === 0) return;
+        const rewardNoteId = notePapers[0].id;
 
-        // 依序為得獎者發放獎勵
         for (let winner of rewardList) {
           const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${winner.uid}.json`;
           const uRes = await fetch(userRefUrl);
@@ -553,16 +545,13 @@
           }
         }
 
-        // 記錄本月已派獎完成
         await fetch(SYSTEM_STATE_URL, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ lastRewardMonth: currentMonthKey })
         });
-
-        console.log("Monthly Top 3 automated reward distributed successfully!");
       } catch (e) {
-        console.error("Auto reward error:", e);
+        console.error(e);
       }
     }
 
@@ -838,7 +827,7 @@
       return map[cat] || '一般';
     }
 
-    // 取得公開的 Top 1-10 排行榜（大家只看到名字與排名，不顯示數目）
+    // 取得公開的 Top 1-10 排行榜（僅顯示名字與排名）
     async function fetchPublicLeaderboard() {
       try {
         const res = await fetch(DB_URL);
@@ -939,7 +928,7 @@
 
         if (!res.ok) throw new Error("送出失敗");
 
-        alert("成功送出信件與需求！若包含求檔或留言將自動顯示在首頁跑馬燈上。");
+        alert("成功送出信件與需求！內容已同步至管理員後台與首頁跑馬燈。");
         document.getElementById('feedbackName').value = '';
         document.getElementById('feedbackContent').value = '';
         showMenu();
