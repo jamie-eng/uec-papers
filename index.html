@@ -266,8 +266,16 @@
 
   <script>
     const firebaseConfig = {
-      databaseURL: "https://uec-papers-default-rtdb.firebaseio.com"
+      apiKey: "AIzaSyBBIEc7IPrUCUdBsspZR4dZgjCXcFB2IFE",
+      authDomain: "uec-papers.firebaseapp.com",
+      databaseURL: "https://uec-papers-default-rtdb.firebaseio.com",
+      projectId: "uec-papers",
+      storageBucket: "uec-papers.firebasestorage.app",
+      messagingSenderId: "525376968385",
+      appId: "1:525376968385:web:77fe8b723e7ca878986640",
+      measurementId: "G-BD2P5DYWWC"
     };
+
     if (!firebase.apps.length) {
       firebase.initializeApp(firebaseConfig);
     }
