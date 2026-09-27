@@ -503,7 +503,6 @@
 
       visiblePapers.forEach(item => {
         const tr = document.createElement('tr');
-        // 如果管理員有針對這筆審批留言(adminMsg)，可以顯示出來
         const msgNotice = item.adminMsg ? `<div style="font-size:11px; color:#1976d2; margin-top:2px;">管理員備註：${escapeHtml(item.adminMsg)}</div>` : '';
         tr.innerHTML = `
           <td><span class="year-tag">${escapeHtml(item.year)}</span><b>${escapeHtml(item.subject)}</b>${msgNotice}</td>
@@ -595,8 +594,8 @@
 
         tr.innerHTML = `
           <td>${badge}</td>
-          <td>[${escapeHtml(item.year)}]<br><b>${escapeHtml(item.subject)}</b></td>
-          <td>${escapeHtml(item.school)}<br><small>由 ${escapeHtml(item.uploader)} 上傳</small>${remarkHtml}${msgHtml}</td>
+          <td>[${escapeHtml(item.year || '未填')}]<br><b>${escapeHtml(item.subject || '未填')}</b></td>
+          <td>${escapeHtml(item.school || '未填')}<br><small>由 ${escapeHtml(item.uploader || '匿名')} 上傳</small>${remarkHtml}${msgHtml}</td>
           <td>${fileActionHtml}</td>
           <td>
             <div class="action-btns">
@@ -614,13 +613,13 @@
       const paper = adminPaperList.find(p => p.id === id);
       if (!paper) return;
 
-      const newSubject = prompt("修改科目名稱:", paper.subject);
+      const newSubject = prompt("修改科目名稱:", paper.subject || '');
       if (newSubject === null) return;
-      const newYear = prompt("修改年份 (例如 2026):", paper.year);
+      const newYear = prompt("修改年份 (例如 2026):", paper.year || '');
       if (newYear === null) return;
-      const newSchool = prompt("修改學校名稱:", paper.school);
+      const newSchool = prompt("修改學校名稱:", paper.school || '');
       if (newSchool === null) return;
-      const newUploader = prompt("修改上載者姓名:", paper.uploader);
+      const newUploader = prompt("修改上載者姓名:", paper.uploader || '');
       if (newUploader === null) return;
 
       try {
@@ -645,9 +644,8 @@
       const paper = adminPaperList.find(p => p.id === id);
       if (!paper) return;
 
-      // 讓管理員可以輸入要給用戶的訊息 / 回覆備註
       const adminMsg = prompt(`審批批准並解鎖額度：\n請輸入要給用戶的訊息（例如：已為您指定解鎖該考卷 / 隨機分配成功）：`, "已審核通過，祝您備考順利！");
-      if (adminMsg === null) return; // 點擊取消
+      if (adminMsg === null) return;
 
       try {
         await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
@@ -746,11 +744,11 @@
       }
 
       const newPaper = {
-        uploader: document.getElementById('uploaderName').value,
+        uploader: document.getElementById('uploaderName').value.trim(),
         uploaderUid: currentUser.uid,
         year: document.getElementById('paperYear').value.trim(),
-        subject: document.getElementById('subjectName').value,
-        school: document.getElementById('schoolName').value,
+        subject: document.getElementById('subjectName').value.trim(),
+        school: document.getElementById('schoolName').value.trim(),
         remark: document.getElementById('uploaderRemark').value.trim(),
         link: fileUrl,
         approved: false,
@@ -769,7 +767,7 @@
           submitBtn.disabled = false;
           submitBtn.innerText = '上傳送審 (需管理員審核)';
           submitBtn.classList.remove('success');
-          document.getElementById('uploaderRemark').value = '';
+          document.getElementById('upload-form').reset();
           showMenu();
         }, 1000);
       } catch(err) {
