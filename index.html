@@ -1179,35 +1179,6 @@
       });
     }
 
-  if (keyword) {
-    visiblePapers = visiblePapers.filter(item => {
-      return (item.subject && item.subject.toLowerCase().includes(keyword)) ||
-             (item.school && item.school.toLowerCase().includes(keyword)) ||
-             (item.year && item.year.toLowerCase().includes(keyword));
-    });
-  }
-
-  if (visiblePapers.length === 0) {
-    listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px; opacity:0.7;">目前沒有符合條件且已解鎖的資源。透過上傳檔案可自動解鎖！</td></tr>';
-    return;
-  }
-
-  visiblePapers.forEach(item => {
-    const tr = document.createElement('tr');
-    const catLabel = getCategoryLabel(item.category);
-    const msgNotice = item.adminMsg ? `<div style="font-size:11px; color:#1976d2; margin-top:2px;">狀態：${escapeHtml(item.adminMsg)}</div>` : '';
-    
-    tr.innerHTML = `
-      <td><span class="year-tag">${catLabel}</span><b>${escapeHtml(item.subject)}</b>${msgNotice}</td>
-      <td>${escapeHtml(item.school)}<div class="uploader-tag">由 ${escapeHtml(item.uploader)} 上傳</div></td>
-      <td>
-        <button class="download-btn" onclick="openViewer('${item.id}')">👁️ 查看 / 下載</button>
-      </td>
-    `;
-    listContainer.appendChild(tr);
-  });
-}
-
     function renderAdminUsers() {
       const tbody = document.getElementById('admin-papers-list');
       const thead = document.getElementById('admin-table-head');
