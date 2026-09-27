@@ -9,6 +9,7 @@
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
   </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -302,7 +303,7 @@
       <div class="form-group">
         <label>📁 選擇本地檔案 (PDF / 圖片)</label>
         <input type="file" id="paperFile" accept=".pdf,image/*" />
-        <span class="file-hint">⚠️ 內建智能處理：若檔案過大，請改填下方雲端連結以防預覽失效。</span>
+        <span class="file-hint">⚠️ 內建智能處理：檔案超過 8MB 時會自動壓縮（圖片降畫質，PDF 轉圖片降解析度）；若壓縮後仍過大，建議改填下方雲端連結。</span>
       </div>
 
       <div class="or-divider">── 或填寫網絡連結 ──</div>
@@ -1592,6 +1593,55 @@
       return result;
     }
 
+    // 將 PDF 每一頁轉成圖片、降低畫質/尺寸後，用 pdf-lib 重新組成一份較小的 PDF，
+    // 邏輯跟圖片壓縮一樣：一直重試到符合大小限制為止
+    async function compressPdfFile(file, maxBytes, onProgress) {
+      const originalBuffer = await file.arrayBuffer();
+
+      let scale = 1.2;
+      let quality = 0.75;
+      let resultBytes = null;
+
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const bufferCopy = originalBuffer.slice(0);
+        const pdf = await pdfjsLib.getDocument({ data: bufferCopy }).promise;
+        const newPdf = await PDFLib.PDFDocument.create();
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          if (onProgress) onProgress(`PDF 壓縮中：第 ${attempt + 1} 次嘗試，第 ${i}/${pdf.numPages} 頁...`);
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale });
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext('2d');
+          await page.render({ canvasContext: ctx, viewport }).promise;
+
+          const jpgDataUrl = canvas.toDataURL('image/jpeg', quality);
+          const jpgBytes = await (await fetch(jpgDataUrl)).arrayBuffer();
+          const jpgImage = await newPdf.embedJpg(jpgBytes);
+          const pdfPage = newPdf.addPage([viewport.width, viewport.height]);
+          pdfPage.drawImage(jpgImage, { x: 0, y: 0, width: viewport.width, height: viewport.height });
+        }
+
+        resultBytes = await newPdf.save();
+        if (resultBytes.byteLength <= maxBytes) break;
+
+        if (quality > 0.35) {
+          quality -= 0.15;
+        } else {
+          scale *= 0.75;
+        }
+      }
+
+      let binary = '';
+      const chunkSize = 0x8000;
+      for (let i = 0; i < resultBytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, resultBytes.subarray(i, i + chunkSize));
+      }
+      return 'data:application/pdf;base64,' + btoa(binary);
+    }
+
     async function handleUpload() {
       if (!currentUser) { openAuthView(); return; }
 
@@ -1626,6 +1676,7 @@
         const file = fileInput.files[0];
         const maxBytes = 8 * 1024 * 1024;
         const isImage = file.type.startsWith('image/');
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 
         if (file.size > maxBytes) {
           if (isImage) {
@@ -1644,8 +1695,23 @@
               submitBtn.innerText = '上傳送審 (需管理員審核)';
               return;
             }
+          } else if (isPdf) {
+            try {
+              fileUrl = await compressPdfFile(file, maxBytes, (msg) => { submitBtn.innerText = msg; });
+              const approxBytes = fileUrl.length * 0.75;
+              if (approxBytes > maxBytes) {
+                alert("⚠️ 已自動壓縮 PDF，但檔案仍偏大（頁數較多或原始畫質很高）。建議改用 Google Drive 連結，以確保預覽順暢，或嘗試分割成較少頁數再上傳。");
+              } else {
+                alert("✓ PDF 過大，已自動壓縮至可上傳大小（頁面會轉為圖片壓縮，文字將無法反白複製）。");
+              }
+            } catch (e) {
+              alert("自動壓縮 PDF 失敗，請改為上傳至 Google Drive，並將分享連結貼在下方欄位。\n錯誤：" + e.message);
+              submitBtn.disabled = false;
+              submitBtn.innerText = '上傳送審 (需管理員審核)';
+              return;
+            }
           } else {
-            alert("⚠️ 檔案大於 8MB，PDF/其他格式無法在瀏覽器端自動壓縮。請改為上傳至 Google Drive，並將分享連結貼在下方「下載/預覽連結」欄位（最推薦的方式）。");
+            alert("⚠️ 檔案大於 8MB 且非圖片/PDF，無法自動壓縮。請改為上傳至 Google Drive，並將分享連結貼在下方「下載/預覽連結」欄位。");
             submitBtn.disabled = false;
             submitBtn.innerText = '上傳送審 (需管理員審核)';
             return;
