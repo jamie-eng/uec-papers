@@ -148,17 +148,18 @@
 
     /* Admin Panel Modal */
     .admin-modal-content {
-      background: var(--card-bg); color: var(--text-color); width: 95%; max-width: 760px; height: 88vh;
+      background: var(--card-bg); color: var(--text-color); width: 95%; max-width: 820px; height: 88vh;
       border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; box-shadow: var(--shadow);
     }
     .status-badge { padding: 3px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; display: inline-block; }
     .status-pending { background: #fff3cd; color: #856404; }
     .status-approved { background: #d4edda; color: #155724; }
     
-    .action-btns { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; }
+    .action-btns { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; align-items: center; }
     .btn-delete { background-color: var(--danger-btn); padding: 5px 7px; font-size: 11px; border-radius: 6px; color: white; border: none; cursor: pointer; }
     .btn-edit { background-color: var(--edit-btn); padding: 5px 7px; font-size: 11px; border-radius: 6px; color: white; border: none; cursor: pointer; }
     .btn-approve { background-color: var(--success-btn); padding: 5px 7px; font-size: 11px; border-radius: 6px; color: white; border: none; cursor: pointer; }
+    .btn-view-admin { background-color: var(--header-purple); color: var(--header-text); padding: 5px 7px; font-size: 11px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; }
 
     svg { stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
   </style>
@@ -303,7 +304,7 @@
               <th>狀態</th>
               <th>年份/科目</th>
               <th>學校/上載者</th>
-              <th>預覽</th>
+              <th>檔案/連結</th>
               <th>管理操作 (排/改/批)</th>
             </tr>
           </thead>
@@ -541,6 +542,8 @@
         adminPaperList = [];
         if (data) {
           adminPaperList = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+          // Also sync global papersData so admin viewer works seamlessly
+          papersData = adminPaperList;
         }
         renderAdminTable();
       } catch (err) {
@@ -570,11 +573,23 @@
         const badge = isAppr ? '<span class="status-badge status-approved">已通過</span>' : '<span class="status-badge status-pending">待審核</span>';
         const approveBtn = !isAppr ? `<button class="btn-approve" onclick="approvePaper('${item.id}')">批准</button>` : '';
 
+        // Added file viewing options for admin
+        let viewFileAction = '';
+        if (item.link) {
+          if (item.link.startsWith('data:image/') || item.link.startsWith('data:application/pdf')) {
+            viewFileAction = `<button class="btn-view-admin" onclick="openViewer('${item.id}')">👁️ 預覽</button>`;
+          } else {
+            viewFileAction = `<a href="${escapeHtml(item.link)}" target="_blank" style="color:var(--edit-btn); font-weight:bold; font-size:12px;">🔗 連結</a>`;
+          }
+        } else {
+          viewFileAction = '<span style="font-size:11px; opacity:0.5;">無檔案</span>';
+        }
+
         tr.innerHTML = `
           <td>${badge}</td>
           <td>[${escapeHtml(item.year)}]<br><b>${escapeHtml(item.subject)}</b></td>
           <td>${escapeHtml(item.school)}<br><small>${escapeHtml(item.uploader)}</small></td>
-          <td><a href="${escapeHtml(item.link)}" target="_blank" style="color:var(--edit-btn);">連結</a></td>
+          <td>${viewFileAction}</td>
           <td>
             <div class="action-btns">
               ${approveBtn}
@@ -659,7 +674,7 @@
     }
 
     async function openViewer(id) {
-      const paper = papersData.find(p => p.id === id);
+      const paper = papersData.find(p => p.id === id) || adminPaperList.find(p => p.id === id);
       if (!paper || !paper.link) return;
       const modal = document.getElementById('viewer-modal');
       const modalBody = document.getElementById('modal-body');
