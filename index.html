@@ -125,6 +125,7 @@
     .download-btn { cursor: pointer; border: none; color: var(--header-text); font-size: 13px; font-weight: bold; background: var(--header-purple); padding: 6px 12px; border-radius: 6px; display: inline-block; }
 
     .or-divider { text-align: center; font-size: 12px; opacity: 0.5; margin: 6px 0; }
+    .switch-mode-text { text-align: center; font-size: 12px; margin-top: 10px; color: var(--primary-btn); cursor: pointer; font-weight: bold; }
 
     /* Modal 查看器 */
     .modal {
@@ -155,7 +156,7 @@
       <h1 class="header-title">統考預試試卷<br>收集站</h1>
     </div>
     <div class="header-right">
-      <button class="login-btn" id="login-status-btn" onclick="handleAuthClick()">Gmail 登入</button>
+      <button class="login-btn" id="login-status-btn" onclick="openAuthView()">帳號登入</button>
       <button class="icon-btn" id="theme-toggle">
         <svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="23" y2="12"></line></svg>
       </button>
@@ -176,6 +177,24 @@
       <svg class="card-icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"></path><line x1="4" y1="21" x2="20" y2="21"></line></svg>
       <div class="card-title">下載考卷 (2025 及之前)</div>
     </div>
+  </main>
+
+  <!-- 帳號認證頁面 (登入/註冊) -->
+  <main id="auth-view" class="view-section">
+    <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
+    <div class="section-title" id="auth-title">🔐 帳號登入</div>
+    <form id="auth-form">
+      <div class="form-group">
+        <label>電子郵件 (Gmail)</label>
+        <input type="email" id="authEmail" required placeholder="example@gmail.com" />
+      </div>
+      <div class="form-group">
+        <label>密碼 (Password)</label>
+        <input type="password" id="authPassword" required placeholder="至少 6 位密碼" />
+      </div>
+      <button type="submit" class="btn-submit" id="auth-submit-btn">立即登入</button>
+      <div class="switch-mode-text" id="switch-auth-mode" onclick="toggleAuthMode()">還沒有帳號？點此免費註冊</div>
+    </form>
   </main>
 
   <!-- 上傳頁面 -->
@@ -258,7 +277,9 @@
     let currentCategory = '2026';
     let papersData = [];
     let currentUser = null;
+    let isRegisterMode = false;
 
+    // 監聽 Firebase 登入狀態
     firebase.auth().onAuthStateChanged((user) => {
       currentUser = user;
       const loginBtn = document.getElementById('login-status-btn');
@@ -266,23 +287,72 @@
         loginBtn.innerText = "已登入 (登出)";
         loginBtn.style.background = "#2e7d32";
       } else {
-        loginBtn.innerText = "Gmail 登入";
+        loginBtn.innerText = "帳號登入";
         loginBtn.style.background = "var(--primary-btn)";
       }
     });
 
-    function handleAuthClick() {
+    // 切換登入與註冊介面
+    function openAuthView() {
       if (currentUser) {
-        if (confirm("確定要登出帳號嗎？")) {
-          firebase.auth().signOut();
+        if (confirm(`目前已登入：${currentUser.email}\n確定要登出帳號嗎？`)) {
+          firebase.auth().signOut().then(() => {
+            showMenu();
+          });
         }
+        return;
+      }
+      mainMenu.style.display = 'none';
+      uploadView.style.display = 'none';
+      downloadView.style.display = 'none';
+      document.getElementById('auth-view').style.display = 'block';
+    }
+
+    function toggleAuthMode() {
+      isRegisterMode = !isRegisterMode;
+      const title = document.getElementById('auth-title');
+      const submitBtn = document.getElementById('auth-submit-btn');
+      const switchText = document.getElementById('switch-auth-mode');
+
+      if (isRegisterMode) {
+        title.innerText = "📝 免費帳號註冊";
+        submitBtn.innerText = "確認註冊";
+        switchText.innerText = "已有帳號？點此直接登入";
       } else {
-        const provider = new firebase.auth.GoogleAuthProvider();
-        firebase.auth().signInWithPopup(provider).catch((error) => {
-          alert("登入失敗: " + error.message);
-        });
+        title.innerText = "🔐 帳號登入";
+        submitBtn.innerText = "立即登入";
+        switchText.innerText = "還沒有帳號？點此免費註冊";
       }
     }
+
+    // 處理帳號登入 / 註冊表單送出
+    document.getElementById('auth-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const email = document.getElementById('authEmail').value.trim();
+      const password = document.getElementById('authPassword').value;
+      const submitBtn = document.getElementById('auth-submit-btn');
+
+      submitBtn.disabled = true;
+      submitBtn.innerText = '處理中...';
+
+      try {
+        if (isRegisterMode) {
+          await firebase.auth().createUserWithEmailAndPassword(email, password);
+          alert("註冊成功並已自動登入！");
+        } else {
+          await firebase.auth().signInWithEmailAndPassword(email, password);
+          alert("登入成功！");
+        }
+        document.getElementById('authEmail').value = '';
+        document.getElementById('authPassword').value = '';
+        showMenu();
+      } catch (err) {
+        alert("操作失敗: " + err.message);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = isRegisterMode ? "確認註冊" : "立即登入";
+      }
+    });
 
     document.getElementById('theme-toggle').onclick = () => document.body.classList.toggle('dark-mode');
     const mainMenu = document.getElementById('main-menu');
@@ -293,9 +363,15 @@
       mainMenu.style.display = 'flex';
       uploadView.style.display = 'none';
       downloadView.style.display = 'none';
+      document.getElementById('auth-view').style.display = 'none';
     }
 
     document.getElementById('btn-upload').onclick = () => {
+      if (!currentUser) {
+        alert("請先登入帳號才能上傳考卷！");
+        openAuthView();
+        return;
+      }
       mainMenu.style.display = 'none';
       uploadView.style.display = 'block';
     };
@@ -305,8 +381,8 @@
 
     async function openDownloadPage(category) {
       if (!currentUser) {
-        if (confirm("您需要先使用 Gmail 登入才能查看或下載考卷。是否立即登入？")) {
-          handleAuthClick();
+        if (confirm("您需要先登入帳號才能查看或下載考卷。是否前往登入？")) {
+          openAuthView();
         }
         return;
       }
@@ -334,13 +410,11 @@
           }));
         }
 
-        // 获取用户当前的上传计数与解锁额度
         const userRefUrl = `https://uec-papers-default-rtdb.firebaseio.com/users/${currentUser.uid}.json`;
         const userRes = await fetch(userRefUrl);
         const userData = await userRes.json() || { uploadedCount: 0 };
         const uploadedCount = userData.uploadedCount || 0;
 
-        // 核心规则：上传 N 份，可查看 N * 2 份。若达到总数则解锁全部
         const filtered = papersData.filter(p => {
           const y = parseInt(p.year);
           return category === '2026' ? y === 2026 : (y <= 2025 || isNaN(y));
@@ -372,7 +446,6 @@
         return;
       }
 
-      // 根据用户解锁的额度截取可见列表
       const visiblePapers = filteredData.slice(0, allowedCount);
       const lockedCount = Math.max(0, filteredData.length - visiblePapers.length);
 
@@ -386,7 +459,6 @@
         listContainer.appendChild(tr);
       });
 
-      // 如果还有未解锁的，显示提示行
       if (lockedCount > 0) {
         const lockTr = document.createElement('tr');
         lockTr.innerHTML = `
@@ -399,7 +471,6 @@
       }
     }
 
-    // 全屏查看器逻辑
     async function openViewer(id) {
       const paper = papersData.find(p => p.id === id);
       if (!paper || !paper.link) {
@@ -499,13 +570,12 @@
       }
     });
 
-    // 表单提交及贡献计数更新邏輯
     document.getElementById('upload-form').addEventListener('submit', async function(e) {
       e.preventDefault();
 
       if (!currentUser) {
-        alert("請先完成 Gmail 登入才能上傳考卷！");
-        handleAuthClick();
+        alert("請先完成登入才能上傳考卷！");
+        openAuthView();
         return;
       }
 
