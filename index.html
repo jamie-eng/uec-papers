@@ -88,6 +88,14 @@
     .marquee-item { margin-right: 40px; display: inline-flex; align-items: center; gap: 6px; }
     @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 
+    /* 公開 Top 3 排行榜區塊 */
+    .public-leaderboard {
+      background: var(--card-bg); border-radius: 16px; padding: 16px; box-shadow: var(--shadow);
+      border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 8px;
+    }
+    .public-leaderboard-title { font-size: 14px; font-weight: 700; color: var(--header-text); display: flex; align-items: center; gap: 6px; }
+    .public-top3-items { font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+
     .card {
       background-color: var(--card-bg); border-radius: 16px; box-shadow: var(--shadow);
       padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -214,6 +222,12 @@
   </div>
 
   <main id="main-menu">
+    <!-- 公開 Top 3 排行榜 (大家只看到名字) -->
+    <div class="public-leaderboard">
+      <div class="public-leaderboard-title">🏆 每月 Top 3 貢獻排行榜（每月1號定期送筆記獎勵）</div>
+      <div class="public-top3-items" id="public-top3-list">載入中...</div>
+    </div>
+
     <div class="card" id="btn-upload">
       <svg class="card-icon" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"></path><line x1="4" y1="21" x2="20" y2="21"></line></svg>
       <div class="card-title">上傳考卷或筆記</div>
@@ -364,7 +378,7 @@
         <p>歡迎使用本站。為維護良好的學術分享與筆記交流環境，請嚴格遵守：</p>
         <p><b>1. 版權歸屬：</b>所有上傳之試卷與筆記版權歸屬原作者或學校，僅供學術交流與複習備考使用。</p>
         <p><b>2. 違規處置（Delete）：</b>嚴禁惡意上傳無關內容、色情暴力、廣告或侵權檔案，違者管理員將<b>直接刪除並永久封鎖該 Gmail 登入權限</b>。</p>
-        <p><b>3. 獎勵提醒：</b>積極上傳優質筆記與考卷，<b>Top 3 貢獻者將獲得獨家學霸筆記獎勵！</b></p>
+        <p><b>3. 獎勵提醒：</b>積極上傳優質筆記與考卷，<b>每個月1號定期選出 Top 3 貢獻者贈送筆記獎勵！</b></p>
       </div>
       <button type="button" class="btn-submit" onclick="closeCopyrightModal()">我已完全了解並同意</button>
     </div>
@@ -373,12 +387,12 @@
   <div id="admin-modal" class="modal">
     <div class="admin-modal-content">
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h2>👑 管理員審核、封鎖與 Top 3 獎勵後台</h2>
+        <h2>👑 管理員審核、私信、封鎖與 Top 3 後台</h2>
         <button class="modal-close" style="color:var(--text-color);" onclick="closeAdminModal()">&times;</button>
       </div>
 
       <div class="leaderboard-box" style="background: var(--header-purple); color: var(--header-text); padding: 12px; border-radius: 8px;">
-        <div class="leaderboard-title">🏆 Top 3 貢獻排行榜（享有筆記獎勵資格）</div>
+        <div class="leaderboard-title">🏆 Top 3 貢獻排行榜（管理員詳細版）</div>
         <div id="admin-top3-list" style="font-size: 12px; line-height: 1.4;">載入中...</div>
       </div>
 
@@ -388,7 +402,7 @@
           <select id="adminPanelTab" onchange="switchAdminTab()" style="padding: 6px; border-radius: 6px;">
             <option value="papers" selected>資源審核管理</option>
             <option value="feedbacks">寫信留言與求檔需求</option>
-            <option value="users">用戶名單與封鎖管理</option>
+            <option value="users">用戶名單、私信與封鎖管理</option>
           </select>
         </div>
         <div id="paper-filter-container">
@@ -459,6 +473,7 @@
     window.onload = () => {
       document.getElementById('copyright-modal').style.display = 'flex';
       fetchMarqueeRequests();
+      fetchPublicLeaderboard();
     };
 
     function openCopyrightModal() { document.getElementById('copyright-modal').style.display = 'flex'; }
@@ -480,7 +495,6 @@
 
     firebase.auth().onAuthStateChanged(async (user) => {
       if (user) {
-        // 檢查是否被封鎖
         const banned = await checkIsBanned(user.email);
         if (banned) {
           alert("⚠️ 此 Gmail 帳號已被管理員永久封鎖，無法登入！");
@@ -545,7 +559,6 @@
         return;
       }
 
-      // 登入或註冊前先檢查是否在黑名單中
       const banned = await checkIsBanned(email);
       if (banned) {
         alert("⚠️ 此 Gmail 帳號已被管理員永久封鎖，無法登入！");
@@ -598,6 +611,7 @@
       hideAllViews();
       mainMenu.style.display = 'flex';
       fetchMarqueeRequests();
+      fetchPublicLeaderboard();
     }
 
     document.getElementById('btn-upload').onclick = () => {
@@ -672,7 +686,7 @@
         });
 
         const banner = document.getElementById('unlock-status-banner');
-        banner.innerHTML = `📊 您目前已解鎖 <b>${unlockedIds.length}</b> 份資源。積極上傳可獲得 Top 3 筆記獎勵！`;
+        banner.innerHTML = `📊 您目前已解鎖 <b>${unlockedIds.length}</b> 份資源。每月1號定期統計 Top 3 獎勵！`;
 
         renderFilteredPapers(filtered, unlockedIds);
       } catch (err) {
@@ -735,6 +749,43 @@
       return map[cat] || '一般';
     }
 
+    // 取得公開的 Top 3 貢獻排行榜（大家只看到名字）
+    async function fetchPublicLeaderboard() {
+      try {
+        const res = await fetch(DB_URL);
+        const data = await res.json();
+        const top3Box = document.getElementById('public-top3-list');
+        if (!data) {
+          top3Box.innerHTML = '目前尚無上傳紀錄';
+          return;
+        }
+        const pList = Object.values(data);
+        const uploaderCounts = {};
+        pList.forEach(p => {
+          if (p.approved === true && p.uploader) {
+            uploaderCounts[p.uploader] = (uploaderCounts[p.uploader] || 0) + 1;
+          }
+        });
+
+        const sorted = Object.keys(uploaderCounts).map(name => ({ name, count: uploaderCounts[name] }))
+                             .sort((a, b) => b.count - a.count);
+
+        if (sorted.length === 0) {
+          top3Box.innerHTML = '尚無通過審核的上傳紀錄';
+          return;
+        }
+
+        let html = '';
+        sorted.slice(0, 3).forEach((item, index) => {
+          const medals = ['🥇', '🥈', '🥉'];
+          html += `<div>${medals[index] || '🔹'} <b>${escapeHtml(item.name)}</b> （上傳 ${item.count} 份）</div>`;
+        });
+        top3Box.innerHTML = html;
+      } catch(e) {
+        console.error(e);
+      }
+    }
+
     async function fetchMarqueeRequests() {
       try {
         const res = await fetch(FEEDBACK_DB_URL);
@@ -748,7 +799,6 @@
         }
 
         const items = Object.keys(data).map(k => ({ id: k, ...data[k] }));
-        // 抓取包含「求」或信件/筆記需求的內容
         const requests = items.filter(i => i.content && (i.content.includes('求') || i.content.includes('筆記') || i.content.includes('Gmail')));
 
         if (requests.length > 0) {
@@ -823,6 +873,7 @@
 
     function closeAdminModal() {
       document.getElementById('admin-modal').style.display = 'none';
+      fetchPublicLeaderboard();
     }
 
     function switchAdminTab() {
@@ -864,14 +915,14 @@
           adminUsersList = Object.keys(uData).map(key => ({ uid: key, ...uData[key] }));
         }
 
-        computeTop3Leaderboard();
+        computeAdminTop3Leaderboard();
         switchAdminTab();
       } catch (err) {
         alert("載入後台數據失敗");
       }
     }
 
-    function computeTop3Leaderboard() {
+    function computeAdminTop3Leaderboard() {
       const uploaderCounts = {};
       adminPaperList.forEach(p => {
         if (p.approved === true && p.uploader) {
@@ -891,7 +942,7 @@
       let html = '';
       sorted.slice(0, 3).forEach((item, index) => {
         const medals = ['🥇', '🥈', '🥉'];
-        html += `<div>${medals[index] || '🔹'} <b>${escapeHtml(item.name)}</b> — 通過 ${item.count} 份資源（Top 3 享有筆記獎勵）</div>`;
+        html += `<div>${medals[index] || '🔹'} <b>${escapeHtml(item.name)}</b> — 通過 ${item.count} 份資源（每月1號定期送筆記獎勵）</div>`;
       });
       top3Box.innerHTML = html;
     }
@@ -998,7 +1049,7 @@
         <tr>
           <th>UID</th>
           <th>註冊 Gmail</th>
-          <th>管理操作 (踢人/封鎖)</th>
+          <th>管理操作 (私信 / 封鎖)</th>
         </tr>
       `;
       tbody.innerHTML = '';
@@ -1013,13 +1064,41 @@
         tr.innerHTML = `
           <td><small>${u.uid}</small></td>
           <td><b>${escapeHtml(u.email || '未知信箱')}</b></td>
-          <td><button class="btn-delete" onclick="banUser('${u.email}')">永久封鎖此 Gmail</button></td>
+          <td>
+            <div class="action-btns">
+              <button class="btn-edit" onclick="sendAdminMessageToUser('${u.uid}', '${u.email || ''}')">✉️ 發送私信</button>
+              <button class="btn-delete" onclick="banUser('${u.email}')">永久封鎖</button>
+            </div>
+          </td>
         `;
         tbody.appendChild(tr);
       });
     }
 
-    // 封鎖用戶 (踢人後該 Gmail 無法再登入)
+    // 管理員寫信給指定 UID 的用戶
+    async function sendAdminMessageToUser(uid, email) {
+      const msg = prompt(`請輸入要發送給用戶 (${email || uid}) 的私信內容：`);
+      if (!msg) return;
+
+      try {
+        const adminMsgData = {
+          name: "👑 管理員",
+          content: `[私信通知 @ ${email || uid}] ${msg}`,
+          createdAt: Date.now(),
+          targetUid: uid
+        };
+        await fetch(FEEDBACK_DB_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(adminMsgData)
+        });
+        alert("私信已成功發送！");
+        fetchMarqueeRequests();
+      } catch(e) {
+        alert("發送失敗：" + e.message);
+      }
+    }
+
     async function banUser(email) {
       if (!email) {
         alert("此用戶無有效信箱");
