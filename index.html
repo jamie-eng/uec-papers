@@ -79,12 +79,12 @@
 
     .card {
       background-color: var(--card-bg); border-radius: 16px; box-shadow: var(--shadow);
-      padding: 30px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 24px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center;
       cursor: pointer; transition: transform 0.2s;
     }
 
     .card:active { transform: scale(0.98); }
-    .card-icon { width: 40px; height: 40px; margin-bottom: 12px; }
+    .card-icon { width: 36px; height: 36px; margin-bottom: 10px; }
     .card-title { font-size: 18px; font-weight: 700; text-align: center; }
 
     .view-section {
@@ -130,6 +130,14 @@
     .or-divider { text-align: center; font-size: 12px; opacity: 0.5; margin: 6px 0; }
     .switch-mode-text { text-align: center; font-size: 12px; margin-top: 10px; color: var(--primary-btn); cursor: pointer; font-weight: bold; }
 
+    /* Footer Copyright Link */
+    .site-footer {
+      margin-top: 24px; text-align: center; font-size: 12px; opacity: 0.7;
+      display: flex; flex-direction: column; gap: 4px; width: 100%; max-width: 480px; padding: 0 20px;
+    }
+    .footer-link { color: var(--primary-btn); cursor: pointer; text-decoration: underline; font-weight: bold; }
+    body.dark-mode .footer-link { color: #d8cbeb; }
+
     /* Modals */
     .modal {
       display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%;
@@ -145,6 +153,13 @@
     }
     .modal-body img { max-width: 100%; max-height: 100%; object-fit: contain; }
     .pdf-page-canvas { width: 100% !important; height: auto !important; margin-bottom: 10px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+
+    /* Copyright Notice Specific Modal */
+    .copyright-modal-content {
+      background: var(--card-bg); color: var(--text-color); width: 90%; max-width: 480px;
+      border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: var(--shadow);
+      text-align: left; max-height: 85vh; overflow-y: auto;
+    }
 
     /* Admin Panel Modal */
     .admin-modal-content {
@@ -194,6 +209,10 @@
     <div class="card" id="btn-download-old">
       <svg class="card-icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"></path><line x1="4" y1="21" x2="20" y2="21"></line></svg>
       <div class="card-title">下載考卷 (2025 及之前)</div>
+    </div>
+    <div class="card" id="btn-feedback">
+      <svg class="card-icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+      <div class="card-title">意見反饋箱 (Feedback)</div>
     </div>
   </main>
 
@@ -275,6 +294,29 @@
     </div>
   </main>
 
+  <!-- Feedback View -->
+  <main id="feedback-view" class="view-section">
+    <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
+    <div class="section-title">💡 意見反饋箱</div>
+    <div id="feedback-form">
+      <div class="form-group">
+        <label>您的稱呼或 Email (選填)</label>
+        <input type="text" id="feedbackName" placeholder="例如：小明 / example@gmail.com" />
+      </div>
+      <div class="form-group">
+        <label>反饋內容 / 建議 / 錯誤回報</label>
+        <textarea id="feedbackContent" rows="4" placeholder="請在此輸入您的寶貴意見或遇到的問題..."></textarea>
+      </div>
+      <button type="button" class="btn-submit" id="feedback-submit-btn" onclick="handleFeedbackSubmit()">送出反饋</button>
+    </div>
+  </main>
+
+  <!-- Footer with Copyright Link -->
+  <div class="site-footer">
+    <span>統考預試試卷收集站 &copy; 2026</span>
+    <span class="footer-link" onclick="openCopyrightModal()">📄 版權聲明與使用條款 (Copyright Notice)</span>
+  </div>
+
   <!-- File Viewer Modal -->
   <div id="viewer-modal" class="modal">
     <div class="modal-header">
@@ -284,33 +326,54 @@
     <div class="modal-body" id="modal-body"></div>
   </div>
 
+  <!-- Copyright Notice Modal (Auto-pops on login & via footer link) -->
+  <div id="copyright-modal" class="modal" style="display:flex;">
+    <div class="copyright-modal-content">
+      <h3 style="color: var(--primary-btn);">⚠️ 版權聲明與使用須知 (Copyright Notice)</h3>
+      <div style="font-size: 13px; line-height: 1.5; display:flex; flex-direction:column; gap:8px;">
+        <p>歡迎使用本「統考預試試卷收集站」。為了維護良好的學術分享環境，請全體用戶嚴格遵守以下條款：</p>
+        <p><b>1. 版權歸屬：</b>所有上傳的試卷版權歸屬原學校或出題單位所有，本站僅供學生交流與複習備考使用，嚴禁任何商業營利行為。</p>
+        <p><b>2. 違規處置（Delete）：</b>若發現任何惡意上傳無關內容、侵犯版權、散布惡意程式或違規檔案者，管理員有權<b>直接刪除（Delete）</b>該檔案及違規帳號，恕不另行通知。</p>
+        <p><b>3. 公平共享：</b>請確保上傳真實有效的考卷，共同維護共享社群。</p>
+      </div>
+      <button type="button" class="btn-submit" onclick="closeCopyrightModal()">我已完全了解並同意</button>
+    </div>
+  </div>
+
   <!-- Admin Panel Modal -->
   <div id="admin-modal" class="modal">
     <div class="admin-modal-content">
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h2>👑 管理員審核與排版後台</h2>
+        <h2>👑 管理員審核與反饋後台</h2>
         <button class="modal-close" style="color:var(--text-color);" onclick="closeAdminModal()">&times;</button>
       </div>
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; background: #f9f9fb; padding: 10px; border-radius: 8px;">
         <div>
-          <label style="font-size: 13px; font-weight: bold;">篩選狀態：</label>
+          <label style="font-size: 13px; font-weight: bold;">查看面板：</label>
+          <select id="adminPanelTab" onchange="switchAdminTab()" style="padding: 6px; border-radius: 6px;">
+            <option value="papers" selected>考卷審核管理</option>
+            <option value="feedbacks">用戶反饋箱訊息</option>
+          </select>
+        </div>
+        <div id="paper-filter-container">
+          <label style="font-size: 13px; font-weight: bold;">狀態：</label>
           <select id="adminStatusFilter" onchange="renderAdminTable()" style="padding: 6px; border-radius: 6px;">
-            <option value="pending" selected>待審核 (Pending)</option>
+            <option value="pending" selected>待審核</option>
             <option value="approved">已通過</option>
             <option value="all">全部</option>
           </select>
         </div>
-        <button onclick="fetchAdminPapers()" style="padding: 6px 12px; background:var(--primary-btn); color:white; border:none; border-radius:6px; cursor:pointer;">重新整理</button>
+        <button onclick="fetchAdminData()" style="padding: 6px 12px; background:var(--primary-btn); color:white; border:none; border-radius:6px; cursor:pointer;">重新整理</button>
       </div>
       <div class="table-wrapper" style="flex-grow: 1;">
         <table>
-          <thead>
+          <thead id="admin-table-head">
             <tr>
               <th>狀態</th>
               <th>年份/科目</th>
               <th>學校/上載者/備註</th>
               <th>檔案/連結</th>
-              <th>管理操作 (排/改/批)</th>
+              <th>管理操作</th>
             </tr>
           </thead>
           <tbody id="admin-papers-list"></tbody>
@@ -334,12 +397,28 @@
     if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
 
     const DB_URL = "https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers.json";
+    const FEEDBACK_DB_URL = "https://uec-papers-4c1a7-default-rtdb.firebaseio.com/feedbacks.json";
     const ADMIN_PASS = "Yitwan6988";
     let currentCategory = '2026';
     let papersData = [];
     let adminPaperList = [];
+    let adminFeedbackList = [];
     let currentUser = null;
     let isRegisterMode = false;
+
+    // 剛打開網頁時，如果尚未同意過版權，可讓 Modal 保持顯示；此處預設打開網頁即彈出或登入後彈出
+    window.onload = () => {
+      // 預設初次載入顯示版權公告
+      document.getElementById('copyright-modal').style.display = 'flex';
+    };
+
+    function openCopyrightModal() {
+      document.getElementById('copyright-modal').style.display = 'flex';
+    }
+
+    function closeCopyrightModal() {
+      document.getElementById('copyright-modal').style.display = 'none';
+    }
 
     firebase.auth().onAuthStateChanged((user) => {
       currentUser = user;
@@ -360,9 +439,7 @@
         }
         return;
       }
-      mainMenu.style.display = 'none';
-      uploadView.style.display = 'none';
-      downloadView.style.display = 'none';
+      hideAllViews();
       document.getElementById('auth-view').style.display = 'block';
     }
 
@@ -406,6 +483,9 @@
         }
         document.getElementById('authEmail').value = '';
         document.getElementById('authPassword').value = '';
+        
+        // 每次登入成功後，彈出 Notice 版權公告
+        openCopyrightModal();
         showMenu();
       } catch (err) {
         alert("操作失敗: " + err.message);
@@ -419,12 +499,19 @@
     const mainMenu = document.getElementById('main-menu');
     const uploadView = document.getElementById('upload-view');
     const downloadView = document.getElementById('download-view');
+    const feedbackView = document.getElementById('feedback-view');
 
-    function showMenu() {
-      mainMenu.style.display = 'flex';
+    function hideAllViews() {
+      mainMenu.style.display = 'none';
       uploadView.style.display = 'none';
       downloadView.style.display = 'none';
+      feedbackView.style.display = 'none';
       document.getElementById('auth-view').style.display = 'none';
+    }
+
+    function showMenu() {
+      hideAllViews();
+      mainMenu.style.display = 'flex';
     }
 
     document.getElementById('btn-upload').onclick = () => {
@@ -433,8 +520,13 @@
         openAuthView();
         return;
       }
-      mainMenu.style.display = 'none';
+      hideAllViews();
       uploadView.style.display = 'block';
+    };
+
+    document.getElementById('btn-feedback').onclick = () => {
+      hideAllViews();
+      feedbackView.style.display = 'block';
     };
 
     document.getElementById('btn-download-2026').onclick = () => openDownloadPage('2026');
@@ -447,7 +539,7 @@
         }
         return;
       }
-      mainMenu.style.display = 'none';
+      hideAllViews();
       downloadView.style.display = 'block';
       currentCategory = category;
       document.getElementById('download-title').innerText = category === '2026' ? '↓ 下載考卷 (2026)' : '↓ 下載考卷 (2025 及之前)';
@@ -501,7 +593,12 @@
         return;
       }
 
-      const visiblePapers = filteredData.filter(item => unlockedIds.includes(item.id));
+      const visiblePapers = filteredData.filter(item => {
+        if (!unlockedIds.includes(item.id)) return false;
+        if (item.uploaderUid === currentUser.uid) return false; // 絕對不顯示自己上傳的卷
+        return true;
+      });
+
       const lockedCount = Math.max(0, filteredData.length - visiblePapers.length);
 
       if (visiblePapers.length === 0) {
@@ -531,12 +628,53 @@
       }
     }
 
+    // Feedback Submission Function
+    async function handleFeedbackSubmit() {
+      const name = document.getElementById('feedbackName').value.trim();
+      const content = document.getElementById('feedbackContent').value.trim();
+      const submitBtn = document.getElementById('feedback-submit-btn');
+
+      if (!content) {
+        alert("請填寫反饋內容！");
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.innerText = '送出中...';
+
+      const feedbackData = {
+        name: name || '匿名用戶',
+        content: content,
+        createdAt: Date.now()
+      };
+
+      try {
+        const res = await fetch(FEEDBACK_DB_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(feedbackData)
+        });
+
+        if (!res.ok) throw new Error("送出失敗");
+
+        alert("感謝您的寶貴反饋！我們已成功收到您的訊息。");
+        document.getElementById('feedbackName').value = '';
+        document.getElementById('feedbackContent').value = '';
+        showMenu();
+      } catch (err) {
+        alert("送出失敗，請檢查網絡連線：" + err.message);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = '送出反饋';
+      }
+    }
+
     // Admin Panel Actions
     function openAdminLogin() {
       const pass = prompt("請輸入管理員密碼:");
       if (pass === ADMIN_PASS) {
         document.getElementById('admin-modal').style.display = 'flex';
-        fetchAdminPapers();
+        fetchAdminData();
       } else if (pass !== null) {
         alert("密碼錯誤！");
       }
@@ -546,11 +684,21 @@
       document.getElementById('admin-modal').style.display = 'none';
     }
 
-    async function fetchAdminPapers() {
-      const tbody = document.getElementById('admin-papers-list');
-      tbody.innerHTML = '<tr><td colspan="5" style="padding:16px;">載入後台數據中...</td></tr>';
+    function switchAdminTab() {
+      const tab = document.getElementById('adminPanelTab').value;
+      const filterContainer = document.getElementById('paper-filter-container');
+      if (tab === 'feedbacks') {
+        filterContainer.style.display = 'none';
+        renderAdminFeedbacks();
+      } else {
+        filterContainer.style.display = 'block';
+        renderAdminTable();
+      }
+    }
 
+    async function fetchAdminData() {
       try {
+        // Fetch papers
         const res = await fetch(DB_URL);
         const data = await res.json();
         adminPaperList = [];
@@ -558,14 +706,33 @@
           adminPaperList = Object.keys(data).map(key => ({ id: key, ...data[key] }));
           papersData = adminPaperList;
         }
-        renderAdminTable();
+
+        // Fetch feedbacks
+        const fRes = await fetch(FEEDBACK_DB_URL);
+        const fData = await fRes.json();
+        adminFeedbackList = [];
+        if (fData) {
+          adminFeedbackList = Object.keys(fData).map(key => ({ id: key, ...fData[key] }));
+        }
+
+        switchAdminTab();
       } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="5" style="padding:16px; color:red;">加載失敗</td></tr>';
+        alert("載入後台數據失敗");
       }
     }
 
     function renderAdminTable() {
       const tbody = document.getElementById('admin-papers-list');
+      const thead = document.getElementById('admin-table-head');
+      thead.innerHTML = `
+        <tr>
+          <th>狀態</th>
+          <th>年份/科目</th>
+          <th>學校/上載者/備註</th>
+          <th>檔案/連結</th>
+          <th>管理操作 (排/改/批)</th>
+        </tr>
+      `;
       const filter = document.getElementById('adminStatusFilter').value;
       tbody.innerHTML = '';
 
@@ -576,7 +743,7 @@
       });
 
       if (list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="padding:16px; opacity:0.6;">無相關數據</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="padding:16px; opacity:0.6;">無相關考卷數據</td></tr>';
         return;
       }
 
@@ -617,6 +784,44 @@
       });
     }
 
+    function renderAdminFeedbacks() {
+      const tbody = document.getElementById('admin-papers-list');
+      const thead = document.getElementById('admin-table-head');
+      thead.innerHTML = `
+        <tr>
+          <th>提交時間</th>
+          <th>提交者</th>
+          <th>反饋內容</th>
+          <th>操作 (Delete)</th>
+        </tr>
+      `;
+      tbody.innerHTML = '';
+
+      if (adminFeedbackList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="padding:16px; opacity:0.6;">目前尚無用戶反饋</td></tr>';
+        return;
+      }
+
+      adminFeedbackList.forEach(item => {
+        const tr = document.createElement('tr');
+        const dateStr = new Date(item.createdAt).toLocaleString();
+        tr.innerHTML = `
+          <td><span style="font-size:11px;">${dateStr}</span></td>
+          <td><b>${escapeHtml(item.name)}</b></td>
+          <td style="text-align:left; padding: 10px; max-width: 250px; word-break: break-all;">${escapeHtml(item.content)}</td>
+          <td><button class="btn-delete" onclick="deleteFeedback('${item.id}')">刪除</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function deleteFeedback(id) {
+      if (confirm("確定要刪除這條反饋嗎？")) {
+        await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/feedbacks/${id}.json`, { method: 'DELETE' });
+        fetchAdminData();
+      }
+    }
+
     async function editAdminPaper(id) {
       const paper = adminPaperList.find(p => p.id === id);
       if (!paper) return;
@@ -642,7 +847,7 @@
           })
         });
         alert("資料修改成功！");
-        fetchAdminPapers();
+        fetchAdminData();
       } catch (err) {
         alert("修改失敗");
       }
@@ -653,37 +858,32 @@
       if (!paper) return;
 
       try {
-        // 1. 批准該筆試卷
         await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             approved: true,
-            adminMsg: "已審核通過並為您隨機解鎖新考卷！" 
+            adminMsg: "已審核通過！" 
           })
         });
 
-        // 2. 嚴格執行：絕不解鎖自己的卷，只隨機挑選其他人的卷（若無則欠著，等下次別人放再自動 update）
         if (paper.uploaderUid) {
           const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${paper.uploaderUid}.json`;
           const uRes = await fetch(userRefUrl);
           const userData = await uRes.json() || { unlockedIds: [] };
           let unlockedIds = userData.unlockedIds || [];
 
-          // 撈出所有已通過審核的考卷
           const allPapersRes = await fetch(DB_URL);
           const allPapersData = await allPapersRes.json() || {};
           
-          // 過濾：1.已批准 2.絕對不是自己上傳的 3.還沒解鎖過的
           const availablePapers = Object.keys(allPapersData).map(k => ({ id: k, ...allPapersData[k] })).filter(p => {
             if (p.approved !== true) return false;
-            if (p.uploaderUid === paper.uploaderUid) return false; // 嚴格排除自己
-            if (unlockedIds.includes(p.id)) return false; // 排除已解鎖過
+            if (p.uploaderUid === paper.uploaderUid) return false;
+            if (unlockedIds.includes(p.id)) return false;
             return true;
           });
 
           if (availablePapers.length > 0) {
-            // 隨機挑選一份別人的卷
             const randomIndex = Math.floor(Math.random() * availablePapers.length);
             const selectedPaper = availablePapers[randomIndex];
             unlockedIds.push(selectedPaper.id);
@@ -695,8 +895,7 @@
             });
             alert(`審批成功！已為上傳者隨機解鎖其他用戶的考卷：${selectedPaper.subject} (${selectedPaper.school})`);
           } else {
-            // 沒有其他人的卷可解鎖，保持不變（欠著，等未來有新人上傳時自動 update 補上）
-            alert("審批成功！目前尚無其他人的考卷可供隨機解鎖（已保留額度）。等下次有其他用戶上傳新卷並通過審核後，系統將自動為您隨機解鎖新卷！");
+            alert("審批成功！目前尚無其他人的考卷可供隨機解鎖（已保留名額）。等下次有其他用戶上傳新卷並通過審核後，系統將自動為其隨機解鎖新卷！");
           }
         }
 
@@ -708,9 +907,9 @@
     }
 
     async function deleteAdminPaper(id) {
-      if (confirm("確定從雲端永久刪除此試卷？")) {
+      if (confirm("確定從雲端永久刪除此試卷？（違反版權或違規內容）")) {
         await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, { method: 'DELETE' });
-        fetchAdminPapers();
+        fetchAdminData();
       }
     }
 
