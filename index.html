@@ -319,7 +319,7 @@
     <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
     <div class="section-title" id="download-title">↓ 資源下載區</div>
     
-    <input type="text" class="search-bar" id="searchInput" placeholder="🔍 AI 智慧搜尋：輸入科目、學校或關鍵字（例如：地理、興華）..." oninput="filterPapersList()" />
+    <input type="text" class="search-bar" id="searchInput" placeholder="🔍 AI 智慧搜尋：輸入科目, 學校或關鍵字（例如：地理、興華）..." oninput="filterPapersList()" />
 
     <div style="font-size: 12px; opacity: 0.8; text-align: center; margin-bottom: 12px;" id="unlock-status-banner"></div>
     
@@ -1111,8 +1111,8 @@
         const tr = document.createElement('tr');
         const isAppr = item.approved === true;
         const badge = isAppr ? '<span class="status-badge status-approved">已通過</span>' : '<span class="status-badge status-pending">待審核</span>';
-        const approveBtn = !isAppr ? `<button class="btn-approve" onclick="approvePaper('${item.id}')">批准並1:1解鎖</button>` : '';
-        const customUnlockBtn = !isAppr ? `<button class="btn-approve" style="background:#0288d1; margin-top:2px;" onclick="approveWithSpecificPaper('${item.id}')">🎯 指定解鎖Main Page資源</button>` : '';
+        const approveBtn = !isAppr ? `<button class="btn-approve" onclick="approvePaper('${item.id}')">批准並1:1隨機解鎖</button>` : '';
+        const customUnlockBtn = !isAppr ? `<button class="btn-approve" style="background:#0288d1; margin-top:2px;" onclick="approveWithSpecificPaper('${item.id}')">🎯 1:1 指定解鎖Main Page資源</button>` : '';
 
         let fileActionHtml = '';
         if (item.link) {
@@ -1312,7 +1312,7 @@
         await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ approved: true, adminMsg: "審核通過 (1:1 解鎖)！" })
+          body: JSON.stringify({ approved: true, adminMsg: "審核通過 (1:1 隨機解鎖)！" })
         });
 
         if (paper.uploaderUid) {
@@ -1356,19 +1356,17 @@
       }
     }
 
-    // 新增：根據用戶備註要求，從 Main Page 的現有資源中指定解鎖給該上傳者
     async function approveWithSpecificPaper(pendingId) {
       const paper = adminPaperList.find(p => p.id === pendingId);
       if (!paper) return;
 
-      // 篩選出 Main Page 中所有已批准且不是自己上傳的資源供管理員選擇
       const approvedPapers = adminPaperList.filter(p => p.approved === true && p.id !== pendingId);
       if (approvedPapers.length === 0) {
-        alert("目前 Main Page 中尚無其他已批准的資源可供指定解鎖！");
+        alert("目前 Main Page 中尚無其他已批准的資源可供 1:1 指定解鎖！");
         return;
       }
 
-      let promptMsg = `請選擇要指定解鎖給【${paper.uploader}】的 Main Page 資源編號：\n\n`;
+      let promptMsg = `請選擇要 1:1 指定解鎖給【${paper.uploader}】的 Main Page 資源編號：\n\n`;
       approvedPapers.forEach((p, idx) => {
         promptMsg += `[${idx + 1}] ${p.subject} (${p.school})\n`;
       });
@@ -1385,14 +1383,12 @@
       const selectedTarget = approvedPapers[index];
 
       try {
-        // 1. 批准該上傳項目
         await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${pendingId}.json`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ approved: true, adminMsg: `審核通過！已按您的備註指定解鎖：${selectedTarget.subject}` })
+          body: JSON.stringify({ approved: true, adminMsg: `審核通過！已按您的 1:1 備註指定解鎖：${selectedTarget.subject}` })
         });
 
-        // 2. 將指定的 Main Page 資源 ID 加入該上傳者的 unlockedIds 裡面
         if (paper.uploaderUid) {
           const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${paper.uploaderUid}.json`;
           const uRes = await fetch(userRefUrl);
@@ -1407,7 +1403,7 @@
               body: JSON.stringify({ unlockedIds: unlockedIds })
             });
           }
-          alert(`成功！已批准該上傳，並精準解鎖 Main Page 的「${selectedTarget.subject}」給用戶 ${paper.uploader}！`);
+          alert(`成功！已批准該上傳，並 1:1 精準解鎖 Main Page 的「${selectedTarget.subject}」給用戶 ${paper.uploader}！`);
         }
 
         fetchAdminData();
