@@ -503,7 +503,7 @@
 
       visiblePapers.forEach(item => {
         const tr = document.createElement('tr');
-        const msgNotice = item.adminMsg ? `<div style="font-size:11px; color:#1976d2; margin-top:2px;">管理員備註：${escapeHtml(item.adminMsg)}</div>` : '';
+        const msgNotice = item.adminMsg ? `<div style="font-size:11px; color:#1976d2; margin-top:2px;">管理員回覆：${escapeHtml(item.adminMsg)}</div>` : '';
         tr.innerHTML = `
           <td><span class="year-tag">${escapeHtml(item.year)}</span><b>${escapeHtml(item.subject)}</b>${msgNotice}</td>
           <td>${escapeHtml(item.school)}<div class="uploader-tag">由 ${escapeHtml(item.uploader)} 上傳</div></td>
@@ -644,11 +644,12 @@
       const paper = adminPaperList.find(p => p.id === id);
       if (!paper) return;
 
-      const adminMsg = prompt(`審批批准並解鎖額度：\n請輸入要給用戶的訊息（例如：已為您指定解鎖該考卷 / 隨機分配成功）：`, "已審核通過，祝您備考順利！");
+      const adminMsg = prompt(`審批批准並解鎖額度：\n請輸入要給用戶的回覆訊息：`, "已審核通過，祝您備考順利！");
       if (adminMsg === null) return;
 
       try {
-        await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
+        // 1. 更新試卷狀態為已批准
+        const res = await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -657,6 +658,9 @@
           })
         });
 
+        if (!res.ok) throw new Error("Approval failed");
+
+        // 2. 為上傳者增加解鎖額度
         if (paper.uploaderUid) {
           const userRefUrl = `https://uec-papers-4c1a7-default-rtdb.firebaseio.com/users/${paper.uploaderUid}.json`;
           const uRes = await fetch(userRefUrl);
@@ -670,10 +674,13 @@
           });
         }
 
-        alert("審批成功！已同步至主站下載列表。");
-        fetchAdminPapers();
+        alert("審批成功！");
+        // 本地立即更新狀態，畫面直接刷新
+        paper.approved = true;
+        paper.adminMsg = adminMsg.trim();
+        renderAdminTable();
       } catch (err) {
-        alert("操作失敗");
+        alert("操作失敗，請檢查網絡連線");
       }
     }
 
