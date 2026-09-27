@@ -11,6 +11,10 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
   </script>
 
+  <!-- 引入 Firebase SDK (Auth & App) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+
   <style>
     :root {
       --bg-color: #f2f3f5;
@@ -54,10 +58,16 @@
 
     .header-left { display: flex; align-items: center; gap: 12px; }
     .header-title { font-size: 20px; font-weight: 700; line-height: 1.2; }
+    .header-right { display: flex; align-items: center; gap: 8px; }
 
     .icon-btn {
       background: none; border: none; cursor: pointer; color: var(--text-color);
       display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 50%;
+    }
+
+    .login-btn {
+      background-color: var(--primary-btn); color: white; border: none; padding: 6px 10px;
+      border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer;
     }
 
     main { width: 100%; max-width: 480px; padding: 12px 20px; display: flex; flex-direction: column; gap: 16px; }
@@ -145,7 +155,7 @@
       <h1 class="header-title">統考預試試卷<br>收集站</h1>
     </div>
     <div class="header-right">
-      <a href="admin.html" style="text-decoration:none; font-size:12px; margin-right:8px; opacity:0.6; color:inherit;">⚙️ 管理</a>
+      <button class="login-btn" id="login-status-btn" onclick="handleAuthClick()">Gmail 登入</button>
       <button class="icon-btn" id="theme-toggle">
         <svg width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="23" y2="12"></line></svg>
       </button>
@@ -211,6 +221,7 @@
   <main id="download-view" class="view-section">
     <button class="back-btn" onclick="showMenu()">← 返回主頁</button>
     <div class="section-title" id="download-title">↓ 下載考卷</div>
+    <div style="font-size: 12px; opacity: 0.8; text-align: center; margin-bottom: 12px;" id="unlock-status-banner"></div>
     <div class="table-wrapper">
       <table>
         <thead>
@@ -235,10 +246,43 @@
   </div>
 
   <script>
+    const firebaseConfig = {
+      databaseURL: "https://uec-papers-default-rtdb.firebaseio.com"
+    };
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+
     const DB_URL = "https://uec-papers-default-rtdb.firebaseio.com/papers.json";
     const MAX_FILE_SIZE_MB = 100;
     let currentCategory = '2026';
     let papersData = [];
+    let currentUser = null;
+
+    firebase.auth().onAuthStateChanged((user) => {
+      currentUser = user;
+      const loginBtn = document.getElementById('login-status-btn');
+      if (user) {
+        loginBtn.innerText = "已登入 (登出)";
+        loginBtn.style.background = "#2e7d32";
+      } else {
+        loginBtn.innerText = "Gmail 登入";
+        loginBtn.style.background = "var(--primary-btn)";
+      }
+    });
+
+    function handleAuthClick() {
+      if (currentUser) {
+        if (confirm("確定要登出帳號嗎？")) {
+          firebase.auth().signOut();
+        }
+      } else {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        firebase.auth().signInWithPopup(provider).catch((error) => {
+          alert("登入失敗: " + error.message);
+        });
+      }
+    }
 
     document.getElementById('theme-toggle').onclick = () => document.body.classList.toggle('dark-mode');
     const mainMenu = document.getElementById('main-menu');
@@ -259,12 +303,19 @@
     document.getElementById('btn-download-2026').onclick = () => openDownloadPage('2026');
     document.getElementById('btn-download-old').onclick = () => openDownloadPage('old');
 
-    function openDownloadPage(category) {
+    async function openDownloadPage(category) {
+      if (!currentUser) {
+        if (confirm("您需要先使用 Gmail 登入才能查看或下載考卷。是否立即登入？")) {
+          handleAuthClick();
+        }
+        return;
+      }
+
       mainMenu.style.display = 'none';
       downloadView.style.display = 'block';
       currentCategory = category;
       document.getElementById('download-title').innerText = category === '2026' ? '↓ 下載考卷 (2026)' : '↓ 下載考卷 (2025 及之前)';
-      fetchPapers();
+      await fetchPapers();
     }
 
     async function fetchPapers() {
@@ -283,27 +334,49 @@
           }));
         }
 
-        renderPapers(papersData, currentCategory);
+        // 获取用户当前的上传计数与解锁额度
+        const userRefUrl = `https://uec-papers-default-rtdb.firebaseio.com/users/${currentUser.uid}.json`;
+        const userRes = await fetch(userRefUrl);
+        const userData = await userRes.json() || { uploadedCount: 0 };
+        const uploadedCount = userData.uploadedCount || 0;
+
+        // 核心规则：上传 N 份，可查看 N * 2 份。若达到总数则解锁全部
+        const filtered = papersData.filter(p => {
+          const y = parseInt(p.year);
+          return category === '2026' ? y === 2026 : (y <= 2025 || isNaN(y));
+        });
+
+        const allowedVisibleCount = uploadedCount * 2;
+        const banner = document.getElementById('unlock-status-banner');
+        
+        if (uploadedCount === 0) {
+          banner.innerHTML = `⚠️ 您目前累計上傳 <b>0</b> 份檔案，可查看 <b>0</b> 份。請至少上傳 1 份解鎖查看權限！`;
+        } else if (allowedVisibleCount >= filtered.length) {
+          banner.innerHTML = `🎉 您已上傳 <b>${uploadedCount}</b> 份檔案（解鎖額度：${allowedVisibleCount} 份），目前已解鎖此分類的<b>全部考卷</b>！`;
+        } else {
+          banner.innerHTML = `📊 您已上傳 <b>${uploadedCount}</b> 份檔案，解鎖可查看 <b>${allowedVisibleCount}</b> 份（總計 ${filtered.length} 份）。多上傳可解鎖更多！`;
+        }
+
+        renderPapers(filtered, allowedVisibleCount);
       } catch (err) {
         listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px; color:red;">載入失敗，請檢查網絡。</td></tr>';
       }
     }
 
-    function renderPapers(data, category) {
-      const filtered = data.filter(p => {
-        const y = parseInt(p.year);
-        return category === '2026' ? y === 2026 : (y <= 2025 || isNaN(y));
-      });
-
+    function renderPapers(filteredData, allowedCount) {
       const listContainer = document.getElementById('papers-list');
       listContainer.innerHTML = '';
 
-      if (filtered.length === 0) {
+      if (filteredData.length === 0) {
         listContainer.innerHTML = '<tr><td colspan="3" style="padding:20px;">暫無此分類的考卷數據</td></tr>';
         return;
       }
 
-      filtered.forEach(item => {
+      // 根据用户解锁的额度截取可见列表
+      const visiblePapers = filteredData.slice(0, allowedCount);
+      const lockedCount = Math.max(0, filteredData.length - visiblePapers.length);
+
+      visiblePapers.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td><span class="year-tag">${escapeHtml(item.year)}</span><b>${escapeHtml(item.subject)}</b></td>
@@ -312,9 +385,21 @@
         `;
         listContainer.appendChild(tr);
       });
+
+      // 如果还有未解锁的，显示提示行
+      if (lockedCount > 0) {
+        const lockTr = document.createElement('tr');
+        lockTr.innerHTML = `
+          <td colspan="3" style="padding: 16px; background: rgba(0,0,0,0.03); font-size: 13px; opacity: 0.7;">
+            🔒 還有 <b>${lockedCount}</b> 份考卷被鎖定。請上傳更多檔案以解鎖雙倍查看權限！
+            <br><button style="margin-top:6px; padding:4px 10px; background:var(--primary-btn); color:white; border:none; border-radius:4px; cursor:pointer;" onclick="document.getElementById('btn-upload').click()">去上傳檔案</button>
+          </td>
+        `;
+        listContainer.appendChild(lockTr);
+      }
     }
 
-    // 全屏查看器逻辑 (支持 iPhone 原生逐页渲染)
+    // 全屏查看器逻辑
     async function openViewer(id) {
       const paper = papersData.find(p => p.id === id);
       if (!paper || !paper.link) {
@@ -339,7 +424,6 @@
       } else if (link.startsWith('data:application/pdf')) {
         modalBody.innerHTML = '';
         
-        // 顶部添加保存/全屏打开按钮
         const topBar = document.createElement('div');
         topBar.style.cssText = 'padding:8px; width:100%; text-align:center; background:#2a2a2a; border-radius:6px; margin-bottom:10px;';
         
@@ -354,7 +438,6 @@
         topBar.appendChild(openBtn);
         modalBody.appendChild(topBar);
 
-        // 使用 PDF.js 渲染所有页面，解决 iPhone 限制
         try {
           const pdfData = atob(link.split(',')[1]);
           const loadingTask = pdfjsLib.getDocument({ data: pdfData });
@@ -405,7 +488,6 @@
       document.getElementById('modal-body').innerHTML = '';
     }
 
-    // 检查上传文件大小限制 (100MB)
     document.getElementById('paperFile').addEventListener('change', function() {
       const file = this.files[0];
       if (file) {
@@ -417,9 +499,16 @@
       }
     });
 
-    // 表单提交逻辑
+    // 表单提交及贡献计数更新邏輯
     document.getElementById('upload-form').addEventListener('submit', async function(e) {
       e.preventDefault();
+
+      if (!currentUser) {
+        alert("請先完成 Gmail 登入才能上傳考卷！");
+        handleAuthClick();
+        return;
+      }
+
       const submitBtn = document.getElementById('submit-btn');
       const fileInput = document.getElementById('paperFile');
       const urlInput = document.getElementById('downloadUrl');
@@ -436,10 +525,9 @@
       }
 
       submitBtn.disabled = true;
-      submitBtn.innerText = '正在上傳並處理數據...';
+      submitBtn.innerText = '正在上傳並更新解鎖額度...';
 
       let fileUrl = urlInput.value.trim();
-
       if (fileInput.files[0]) {
         fileUrl = await readFileAsBase64(fileInput.files[0]);
       }
@@ -454,30 +542,53 @@
       };
 
       try {
-        const response = await fetch(DB_URL, {
+        const resPaper = await fetch(DB_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newPaper)
         });
 
-        if (response.ok) {
-          submitBtn.innerText = '✓ 上傳成功！';
-          submitBtn.classList.add('success');
+        if (!resPaper.ok) throw new Error('Paper upload failed');
 
-          document.getElementById('subjectName').value = '';
-          urlInput.value = '';
-          fileInput.value = '';
+        const userRefUrl = `https://uec-papers-default-rtdb.firebaseio.com/users/${currentUser.uid}.json`;
+        const userRes = await fetch(userRefUrl);
+        const userData = await userRes.json() || { uploadedCount: 0 };
 
-          setTimeout(() => {
-            submitBtn.innerText = '上傳同步到 Firebase 雲端';
-            submitBtn.classList.remove('success');
-            submitBtn.disabled = false;
-          }, 1500);
-        } else {
-          throw new Error('Upload failed');
-        }
+        const newCount = (userData.uploadedCount || 0) + 1;
+        const todayStr = new Date().toISOString().split('T')[0];
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        
+        const currentApprovedUntil = userData.approvedUntil && userData.approvedUntil > Date.now() ? userData.approvedUntil : Date.now();
+        const newApprovedUntil = currentApprovedUntil + oneDayMs;
+
+        await fetch(userRefUrl, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: currentUser.email,
+            uploadedCount: newCount,
+            approvedUntil: newApprovedUntil,
+            lastUploadDate: todayStr
+          })
+        });
+
+        submitBtn.innerText = '✓ 上傳成功！額度已加倍';
+        submitBtn.classList.add('success');
+
+        document.getElementById('subjectName').value = '';
+        urlInput.value = '';
+        fileInput.value = '';
+
+        setTimeout(() => {
+          submitBtn.innerText = '上傳同步到 Firebase 雲端';
+          submitBtn.classList.remove('success');
+          submitBtn.disabled = false;
+          alert(`上傳成功！您目前累計上傳 ${newCount} 份，已解鎖查看 ${newCount * 2} 份檔案的權限！`);
+          showMenu();
+        }, 1000);
+
       } catch (err) {
-        alert('上傳失敗！可能是因為檔案數據超出限制，建議大檔案使用 Google Drive 連結提交！');
+        alert('上傳失敗！請檢查網絡連線後重試。');
         submitBtn.innerText = '上傳同步到 Firebase 雲端';
         submitBtn.disabled = false;
       }
