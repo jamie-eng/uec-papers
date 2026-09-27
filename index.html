@@ -230,7 +230,7 @@
 
     <div class="card" id="btn-upload">
       <svg class="card-icon" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"></path><line x1="4" y1="21" x2="20" y2="21"></line></svg>
-      <div class="card-title">上傳考卷或筆記</div>
+      <div class="card-title">上傳考卷或筆記 (1:1 解鎖制度)</div>
     </div>
     <div class="card" id="btn-download-uec">
       <svg class="card-icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"></path><line x1="4" y1="21" x2="20" y2="21"></line></svg>
@@ -305,7 +305,7 @@
       <div class="form-group">
         <label>📁 選擇本地檔案 (PDF / 圖片)</label>
         <input type="file" id="paperFile" accept=".pdf,image/*" />
-        <span class="file-hint">⚠️ 內建壓縮處理：系統將自動優化檔案。若檔案過大，請改填下方雲端連結以防預覽失效。</span>
+        <span class="file-hint">⚠️ 內建智能壓縮：系統將自動優化檔案。若檔案過大，請改填下方雲端連結以防預覽失效。</span>
       </div>
 
       <div class="or-divider">── 或填寫網絡連結 ──</div>
@@ -378,7 +378,7 @@
         <p>歡迎使用本站。為維護良好的學術分享與筆記交流環境，請嚴格遵守：</p>
         <p><b>1. 版權歸屬：</b>所有上傳之試卷與筆記版權歸屬原作者或學校，僅供學術交流與複習備考使用。</p>
         <p><b>2. 違規處置（Delete）：</b>嚴禁惡意上傳無關內容、色情暴力、廣告或侵權檔案，違者管理員將<b>直接刪除並永久封鎖該 Gmail 登入權限</b>。</p>
-        <p><b>3. 獎勵提醒：</b>積極上傳優質筆記與考卷，<b>每個月1號定期選出 Top 3 貢獻者贈送筆記獎勵！</b></p>
+        <p><b>3. 獎勵提醒：</b>積極上傳優質筆記與考卷（1:1 制度），<b>每個月1號定期選出 Top 3 貢獻者贈送筆記獎勵！</b></p>
       </div>
       <button type="button" class="btn-submit" onclick="closeCopyrightModal()">我已完全了解並同意</button>
     </div>
@@ -459,7 +459,7 @@
     let currentUser = null;
     let isRegisterMode = false;
 
-    // 內建 AI 內容過濾器
+    // 內建 AQ Security Filter (AI 內容過濾器)
     const forbiddenWords = ["粗口", "admin123", "hack", "spam", "敏感詞1", "色情"];
     function aiContentFilter(text) {
       if (!text) return false;
@@ -479,7 +479,7 @@
     function openCopyrightModal() { document.getElementById('copyright-modal').style.display = 'flex'; }
     function closeCopyrightModal() { document.getElementById('copyright-modal').style.display = 'none'; }
 
-    // 檢查該用戶是否被管理員列入黑名單 (踢人/封鎖)
+    // 檢查該用戶是否被管理員列入黑名單 (踢人後無法登入)
     async function checkIsBanned(email) {
       if (!email) return false;
       try {
@@ -686,7 +686,7 @@
         });
 
         const banner = document.getElementById('unlock-status-banner');
-        banner.innerHTML = `📊 您目前已解鎖 <b>${unlockedIds.length}</b> 份資源。每月1號定期統計 Top 3 獎勵！`;
+        banner.innerHTML = `📊 您目前已解鎖 <b>${unlockedIds.length}</b> 份資源 (1:1 制度)。每月1號定期統計 Top 3 獎勵！`;
 
         renderFilteredPapers(filtered, unlockedIds);
       } catch (err) {
@@ -799,7 +799,7 @@
         }
 
         const items = Object.keys(data).map(k => ({ id: k, ...data[k] }));
-        const requests = items.filter(i => i.content && (i.content.includes('求') || i.content.includes('筆記') || i.content.includes('Gmail')));
+        const requests = items.filter(i => i.content && (i.content.includes('求') || i.content.includes('筆記') || i.content.includes('Gmail') || i.content.includes('私信')));
 
         if (requests.length > 0) {
           marqueeBox.style.display = 'flex';
@@ -977,7 +977,7 @@
         const tr = document.createElement('tr');
         const isAppr = item.approved === true;
         const badge = isAppr ? '<span class="status-badge status-approved">已通過</span>' : '<span class="status-badge status-pending">待審核</span>';
-        const approveBtn = !isAppr ? `<button class="btn-approve" onclick="approvePaper('${item.id}')">批准並隨機解鎖</button>` : '';
+        const approveBtn = !isAppr ? `<button class="btn-approve" onclick="approvePaper('${item.id}')">批准並1:1解鎖</button>` : '';
 
         let fileActionHtml = '';
         if (item.link) {
@@ -1157,7 +1157,7 @@
         await fetch(`https://uec-papers-4c1a7-default-rtdb.firebaseio.com/papers/${id}.json`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ approved: true, adminMsg: "審核通過！" })
+          body: JSON.stringify({ approved: true, adminMsg: "審核通過 (1:1 解鎖)！" })
         });
 
         if (paper.uploaderUid) {
@@ -1188,7 +1188,7 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ unlockedIds: unlockedIds })
             });
-            alert(`審批成功！已為上傳者隨機解鎖同級資源：${selected.subject} (${selected.school})`);
+            alert(`審批成功！已為上傳者隨機解鎖 1 份同級資源 (${selected.subject})`);
           } else {
             alert("審批成功！目前尚無其他同級資源可供解鎖。");
           }
