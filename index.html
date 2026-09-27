@@ -243,7 +243,7 @@
       <div class="form-group">
         <label>📁 選擇本地檔案 (PDF / 圖片)</label>
         <input type="file" id="paperFile" accept=".pdf,image/*" />
-        <span class="file-hint">⚠️ 檔案大小上限：<b>100MB</b></span>
+        <span class="file-hint">⚠️ 建議檔案小於 5MB，避免雲端寫入失敗</span>
       </div>
 
       <div class="or-divider">── 或填寫網絡連結 ──</div>
@@ -584,10 +584,10 @@
 
         let fileActionHtml = '';
         if (item.link) {
-          if (item.link.startsWith('data:image/') || item.link.startsWith('data:application/pdf')) {
+          if (item.link.startsWith('data:image/') || item.link.startsWith('data:application/pdf') || item.link.startsWith('http')) {
             fileActionHtml = `<button class="btn-view-admin" onclick="openViewer('${item.id}')">👁️ 預覽檔案</button>`;
           } else {
-            fileActionHtml = `<a href="${escapeHtml(item.link)}" target="_blank" style="color:var(--edit-btn); font-weight:bold; font-size:12px; text-decoration:underline;">🔗 外部連結</a>`;
+            fileActionHtml = `<span style="font-size:11px; opacity:0.5;">格式不支援</span>`;
           }
         } else {
           fileActionHtml = '<span style="font-size:11px; opacity:0.5;">無檔案</span>';
@@ -699,14 +699,32 @@
       const modalBody = document.getElementById('modal-body');
       document.getElementById('modal-title').innerText = `${paper.subject} (${paper.school})`;
       modalBody.innerHTML = '<div style="color:white; padding:20px;">載入中...</div>';
+      modal.style.display = 'flex';
 
       const link = paper.link;
+
+      // 如果是網址（例如 Google Drive 連結），直接開新分頁
+      if (link.startsWith('http://') || link.startsWith('https://')) {
+        modalBody.innerHTML = `<div style="color:white; padding:20px; text-align:center;">此為外部連結，將為您開啟分頁：<br><br><a href="${link}" target="_blank" style="color:#64b5f6; font-size:16px; text-decoration:underline;">點此開啟雲端連結</a></div>`;
+        window.open(link, '_blank');
+        return;
+      }
+
+      // 如果是圖片
       if (link.startsWith('data:image/')) {
         modalBody.innerHTML = `<img src="${link}">`;
-      } else if (link.startsWith('data:application/pdf')) {
+        return;
+      }
+
+      // 如果是 PDF
+      if (link.startsWith('data:application/pdf') || link.includes('pdf')) {
         modalBody.innerHTML = '';
         try {
-          const pdfData = atob(link.split(',')[1]);
+          let base64Data = link;
+          if (link.includes(',')) {
+            base64Data = link.split(',')[1];
+          }
+          const pdfData = atob(base64Data);
           const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
           for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
@@ -719,13 +737,17 @@
             await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
           }
         } catch(e) {
-          modalBody.innerHTML = '<div style="color:red; padding:20px;">PDF 加載失敗</div>';
+          // 如果解析失敗，提供直接下載或開新分頁按鈕，避免畫面卡死
+          modalBody.innerHTML = `
+            <div style="color:white; padding:30px; text-align:center;">
+              <p>無法在線預覽此 PDF 檔案</p><br>
+              <a href="${link}" download="exam-paper.pdf" style="background:#1976d2; color:white; padding:10px 20px; border-radius:6px; text-decoration:none; font-weight:bold;">點此下載檔案查看</a>
+            </div>
+          `;
         }
       } else {
-        window.open(link, '_blank');
-        return;
+        modalBody.innerHTML = `<div style="color:white; padding:20px;">無法辨識的檔案格式</div>`;
       }
-      modal.style.display = 'flex';
     }
 
     function closeViewer() { document.getElementById('viewer-modal').style.display = 'none'; }
@@ -757,6 +779,13 @@
 
       let fileUrl = urlInput.value.trim();
       if (fileInput.files[0]) {
+        if (fileInput.files[0].size > 8 * 1024 * 1024) {
+          alert("檔案大於 8MB，為避免上傳失敗，請使用 Google Drive 連結上傳！");
+          submitBtn.disabled = false;
+          submitBtn.innerText = '上傳送審 (需管理員審核)';
+          return;
+        }
+
         fileUrl = await new Promise((res) => {
           const reader = new FileReader();
           reader.onload = () => res(reader.result);
@@ -777,18 +806,22 @@
       };
 
       try {
-        await fetch(DB_URL, {
+        const response = await fetch(DB_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newPaper)
         });
+
+        if (!response.ok) {
+          throw new Error(`伺服器回應錯誤碼: ${response.status}`);
+        }
+
         submitBtn.innerText = '✓ 上傳成功';
         submitBtn.classList.add('success');
         setTimeout(() => {
           submitBtn.disabled = false;
           submitBtn.innerText = '上傳送審 (需管理員審核)';
           submitBtn.classList.remove('success');
-          // 清空欄位
           document.getElementById('uploaderName').value = '';
           document.getElementById('subjectName').value = '';
           document.getElementById('schoolName').value = '';
@@ -798,7 +831,7 @@
           showMenu();
         }, 1000);
       } catch(err) {
-        alert("上傳失敗：" + err.message);
+        alert("上傳失敗，原因：" + err.message);
         submitBtn.disabled = false;
         submitBtn.innerText = '上傳送審 (需管理員審核)';
       }
